@@ -4,11 +4,14 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-export default function Login() {
+export default function Register() {
   const router = useRouter();
   const [formData, setFormData] = useState({
+    name: '',
     email: '',
     password: '',
+    school: '', // Will be replaced with dropdown later
+    canvasApiKey: '',
   });
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -28,7 +31,7 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -39,18 +42,10 @@ export default function Login() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Login failed');
+        throw new Error(data.error || 'Registration failed');
       }
 
-      // Store data in localStorage
-      localStorage.setItem('userData', JSON.stringify(data.user));
-      localStorage.setItem('canvasData', JSON.stringify(data.canvasData));
-      localStorage.setItem('userEmail', formData.email);
-      
-      // Log the Canvas data
-      console.log('Canvas Data:', data.canvasData);
-
-      // Login successful, redirect to dashboard
+      // Registration successful, redirect to dashboard
       router.push('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
@@ -64,7 +59,7 @@ export default function Login() {
       <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Sign in to your account
+            Create your account
           </h2>
         </div>
         {error && (
@@ -74,6 +69,21 @@ export default function Login() {
         )}
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-md shadow-sm space-y-4">
+            <div>
+              <label htmlFor="name" className="sr-only">
+                Full Name
+              </label>
+              <input
+                id="name"
+                name="name"
+                type="text"
+                required
+                className="appearance-none rounded-lg relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                placeholder="Full Name"
+                value={formData.name}
+                onChange={handleChange}
+              />
+            </div>
             <div>
               <label htmlFor="email" className="sr-only">
                 Email address
@@ -104,6 +114,39 @@ export default function Login() {
                 onChange={handleChange}
               />
             </div>
+            <div>
+              <label htmlFor="school" className="sr-only">
+                School
+              </label>
+              <input
+                id="school"
+                name="school"
+                type="text"
+                required
+                className="appearance-none rounded-lg relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                placeholder="School"
+                value={formData.school}
+                onChange={handleChange}
+              />
+            </div>
+            <div>
+              <label htmlFor="canvasApiKey" className="sr-only">
+                Canvas API Key
+              </label>
+              <input
+                id="canvasApiKey"
+                name="canvasApiKey"
+                type="password"
+                required
+                className="appearance-none rounded-lg relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                placeholder="Canvas API Key"
+                value={formData.canvasApiKey}
+                onChange={handleChange}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Get your API key from Canvas Developer Settings
+              </p>
+            </div>
           </div>
 
           <div>
@@ -112,19 +155,19 @@ export default function Login() {
               disabled={isLoading}
               className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
             >
-              {isLoading ? 'Signing in...' : 'Sign in'}
+              {isLoading ? 'Registering...' : 'Register'}
             </button>
           </div>
         </form>
         <div className="text-center">
           <Link 
-            href="/register" 
+            href="/" 
             className="font-medium text-indigo-600 hover:text-indigo-500"
           >
-            Don&apos;t have an account? Register
+            Already have an account? Sign in
           </Link>
         </div>
       </div>
     </div>
   );
-}
+} 
