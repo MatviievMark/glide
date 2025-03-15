@@ -42,14 +42,6 @@ export default function Login() {
         throw new Error(data.error || 'Login failed');
       }
 
-      // Store data in localStorage
-      localStorage.setItem('userData', JSON.stringify(data.user));
-      localStorage.setItem('canvasData', JSON.stringify(data.canvasData));
-      localStorage.setItem('userEmail', formData.email);
-      
-      // Log the Canvas data
-      console.log('Canvas Data:', data.canvasData);
-
       // Login successful, redirect to dashboard
       router.push('/dashboard');
     } catch (err) {
