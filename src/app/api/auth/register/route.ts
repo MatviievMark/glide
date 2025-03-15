@@ -39,8 +39,8 @@ export async function POST(request: Request) {
         password: hashedPassword,
         schoolName: school,
         canvasApiKey,
-      } as any,
-    }) as any;
+      },
+    });
 
     // Remove sensitive data before sending response
     const { password: _, canvasApiKey: __, ...safeUser } = user;
