@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
+    // Create user and only return selected fields (excludes password)
     const user = await prisma.user.create({
       data: {
         name,
@@ -40,12 +40,17 @@ export async function POST(request: Request) {
         schoolName: school,
         canvasApiKey,
       },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        schoolName: true,
+        createdAt: true,
+        updatedAt: true,
+      }
     });
 
-    // Remove sensitive data before sending response
-    const { password: _, canvasApiKey: __, ...safeUser } = user;
-
-    return NextResponse.json(safeUser);
+    return NextResponse.json(user);
   } catch (error) {
     console.error('Registration error:', error);
     return NextResponse.json(

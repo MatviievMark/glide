@@ -16,12 +16,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // Find user
-    const user = await prisma.user.findUnique({
+    // First, find the user to get their password
+    const userWithPassword = await prisma.user.findUnique({
       where: { email },
     });
 
-    if (!user) {
+    if (!userWithPassword) {
       return NextResponse.json(
         { error: 'Invalid credentials' },
         { status: 401 }
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     }
 
     // Verify password
-    const isValidPassword = await bcrypt.compare(password, user.password);
+    const isValidPassword = await bcrypt.compare(password, userWithPassword.password);
 
     if (!isValidPassword) {
       return NextResponse.json(
@@ -38,10 +38,20 @@ export async function POST(request: Request) {
       );
     }
 
-    // Remove sensitive data before sending response
-    const { password: _, canvasApiKey: __, ...safeUser } = user;
+    // Fetch user without sensitive data
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        schoolName: true,
+        createdAt: true,
+        updatedAt: true,
+      }
+    });
 
-    return NextResponse.json(safeUser);
+    return NextResponse.json(user);
   } catch (error) {
     console.error('Login error:', error);
     return NextResponse.json(
