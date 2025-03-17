@@ -45,7 +45,8 @@ export async function POST(request: Request) {
         id: true,
         name: true,
         email: true,
-        schoolName: true,
+        canvasUrl: true,
+        canvasApiKey: true,
         createdAt: true,
         updatedAt: true,
       }

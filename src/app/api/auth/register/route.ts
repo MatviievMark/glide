@@ -37,14 +37,14 @@ export async function POST(request: Request) {
         name,
         email,
         password: hashedPassword,
-        schoolName: school,
+        canvasUrl: school, // Use school field as canvasUrl
         canvasApiKey,
       },
       select: {
         id: true,
         name: true,
         email: true,
-        schoolName: true,
+        canvasUrl: true,
         createdAt: true,
         updatedAt: true,
       }
