@@ -3,9 +3,24 @@
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+import { fetchAllCanvasData } from '@/utils/canvas';
 
 export default function Dashboard() {
   const router = useRouter();
+
+  useEffect(() => {
+    const loadCanvasData = async () => {
+      try {
+        const canvasData = await fetchAllCanvasData();
+        console.log('All Canvas Data:', JSON.stringify(canvasData, null, 2));
+      } catch (error) {
+        console.error('Error fetching Canvas data:', error);
+      }
+    };
+
+    loadCanvasData();
+  }, []);
 
   const handleLogout = async () => {
     try {
