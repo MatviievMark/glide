@@ -1,14 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { setDoc, doc } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-export default function Home() {
+export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [canvasApiKey, setCanvasApiKey] = useState('');
+  const [canvasUrl, setCanvasUrl] = useState('');
   const [error, setError] = useState('');
   const router = useRouter();
 
@@ -22,10 +25,20 @@ export default function Home() {
     return () => unsubscribe();
   }, [router]);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      // Create the user account
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      
+      // Store additional user data in Firestore
+      await setDoc(doc(db, 'users', userCredential.user.uid), {
+        email,
+        canvasApiKey,
+        canvasUrl,
+        createdAt: new Date().toISOString()
+      });
+
       router.push('/dashboard');
     } catch (err: any) {
       setError(err.message);
@@ -37,10 +50,10 @@ export default function Home() {
       <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-xl shadow-lg">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Sign in to your account
+            Create your account
           </h2>
         </div>
-        <form className="mt-8 space-y-6" onSubmit={handleLogin}>
+        <form className="mt-8 space-y-6" onSubmit={handleRegister}>
           {error && (
             <div className="text-red-500 text-sm text-center">{error}</div>
           )}
@@ -59,10 +72,30 @@ export default function Home() {
               <input
                 type="password"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            <div>
+              <input
+                type="text"
+                required
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                placeholder="Canvas URL (e.g., https://canvas.instructure.com)"
+                value={canvasUrl}
+                onChange={(e) => setCanvasUrl(e.target.value)}
+              />
+            </div>
+            <div>
+              <input
+                type="password"
+                required
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                placeholder="Canvas API Key"
+                value={canvasApiKey}
+                onChange={(e) => setCanvasApiKey(e.target.value)}
               />
             </div>
           </div>
@@ -72,13 +105,13 @@ export default function Home() {
               type="submit"
               className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
             >
-              Sign in
+              Sign up
             </button>
           </div>
         </form>
         <div className="text-center">
-          <Link href="/auth/register" className="text-indigo-600 hover:text-indigo-500">
-            Don&apos;t have an account? Sign up
+          <Link href="/" className="text-indigo-600 hover:text-indigo-500">
+            Already have an account? Sign in
           </Link>
         </div>
       </div>
