@@ -10,7 +10,7 @@ export default function Register() {
     name: '',
     email: '',
     password: '',
-    school: '', // Will be replaced with dropdown later
+    canvasUrl: '',
     canvasApiKey: '',
   });
   const [error, setError] = useState('');
@@ -115,19 +115,22 @@ export default function Register() {
               />
             </div>
             <div>
-              <label htmlFor="school" className="sr-only">
-                School
+              <label htmlFor="canvasUrl" className="sr-only">
+                Canvas URL
               </label>
               <input
-                id="school"
-                name="school"
-                type="text"
+                id="canvasUrl"
+                name="canvasUrl"
+                type="url"
                 required
                 className="appearance-none rounded-lg relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                placeholder="School"
-                value={formData.school}
+                placeholder="Canvas URL (e.g. https://canvas.instructure.com)"
+                value={formData.canvasUrl}
                 onChange={handleChange}
               />
+              <p className="mt-1 text-xs text-gray-500">
+                Enter your institution's Canvas URL
+              </p>
             </div>
             <div>
               <label htmlFor="canvasApiKey" className="sr-only">
