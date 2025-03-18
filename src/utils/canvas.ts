@@ -25,28 +25,33 @@ export async function fetchAllCanvasData() {
     '/api/v1/users/self/enrollments',
     '/api/v1/users/self/favorites/courses',
     '/api/v1/users/self/communication_channels',
-    '/api/v1/users/self/profile',
-    '/api/v1/users/self/custom_data'
+    '/api/v1/users/self/profile'
   ];
 
   // Fetch all endpoints through our API route
   const fetchPromises = endpoints.map(async (endpoint) => {
-    const response = await fetch('/api/canvas', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${idToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ endpoint })
-    });
+    try {
+      const response = await fetch('/api/canvas', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ endpoint })
+      });
 
-    if (!response.ok) {
-      console.error(`Failed to fetch ${endpoint}: ${response.statusText}`);
-      return { endpoint, data: null, error: response.statusText };
+      if (!response.ok) {
+        console.error(`Failed to fetch ${endpoint}: ${response.statusText}`);
+        return { endpoint, data: null, error: response.statusText };
+      }
+
+      const data = await response.json();
+      return { endpoint, data, error: null };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`Error fetching ${endpoint}:`, errorMessage);
+      return { endpoint, data: null, error: errorMessage };
     }
-
-    const data = await response.json();
-    return { endpoint, data, error: null };
   });
 
   // Wait for all requests to complete
@@ -85,22 +90,28 @@ export async function fetchCourseDetails(courseId: string) {
   ];
 
   const fetchPromises = courseEndpoints.map(async (endpoint) => {
-    const response = await fetch('/api/canvas', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${idToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ endpoint })
-    });
+    try {
+      const response = await fetch('/api/canvas', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ endpoint })
+      });
 
-    if (!response.ok) {
-      console.error(`Failed to fetch ${endpoint}: ${response.statusText}`);
-      return { endpoint, data: null, error: response.statusText };
+      if (!response.ok) {
+        console.error(`Failed to fetch ${endpoint}: ${response.statusText}`);
+        return { endpoint, data: null, error: response.statusText };
+      }
+
+      const data = await response.json();
+      return { endpoint, data, error: null };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`Error fetching ${endpoint}:`, errorMessage);
+      return { endpoint, data: null, error: errorMessage };
     }
-
-    const data = await response.json();
-    return { endpoint, data, error: null };
   });
 
   const results = await Promise.all(fetchPromises);
