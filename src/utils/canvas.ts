@@ -1,11 +1,14 @@
 import { auth } from '@/lib/firebase';
 
-interface CanvasCredentials {
-  canvasApiKey: string;
-  canvasUrl: string;
+// Define types for Canvas API responses
+interface CanvasResource<T> {
+  data: T | null;
+  error: string | null;
 }
 
-export async function fetchAllCanvasData() {
+type CanvasDataResponse = Record<string, CanvasResource<unknown>>;
+
+export async function fetchAllCanvasData(): Promise<CanvasDataResponse> {
   const currentUser = auth.currentUser;
   if (!currentUser) {
     throw new Error('No authenticated user found');
@@ -63,13 +66,13 @@ export async function fetchAllCanvasData() {
     const resource = endpoint.split('/').pop() || endpoint;
     acc[resource] = { data, error };
     return acc;
-  }, {} as Record<string, { data: any; error: string | null }>);
+  }, {} as CanvasDataResponse);
 
   return canvasData;
 }
 
 // Helper function to fetch data for a specific course
-export async function fetchCourseDetails(courseId: string) {
+export async function fetchCourseDetails(courseId: string): Promise<CanvasDataResponse> {
   const currentUser = auth.currentUser;
   if (!currentUser) {
     throw new Error('No authenticated user found');
@@ -120,5 +123,5 @@ export async function fetchCourseDetails(courseId: string) {
     const resource = endpoint.split('/').pop() || endpoint;
     acc[resource] = { data, error };
     return acc;
-  }, {} as Record<string, { data: any; error: string | null }>);
+  }, {} as CanvasDataResponse);
 }
