@@ -5,22 +5,96 @@
   --foreground: #171717;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+[data-theme="light"] {
+  --background: #ffffff;
+  --foreground: #171717;
+  --nav-bg: #f3f4f6;
+  --nav-border: #e5e7eb;
+  --card-bg: #f9fafb;
+  --card-border: #e5e7eb;
+  --blue-accent: #3b82f6;
+  --blue-accent-hover: #2563eb;
+  --blue-bg: #eff6ff;
+  --blue-border: #bfdbfe;
+  --text-primary: #171717;
+  --text-secondary: #4b5563;
+  --text-tertiary: #6b7280;
+  --text-light: #e5e7eb;
+  --text-semi-light: #9ca3af;
+  --red-accent: #ef4444;
+  --green-accent: #10b981;
+  
+  /* Course colors - pastel for light mode */
+  --course-blue: #93c5fd;
+  --course-purple: #c4b5fd;
+  --course-green: #86efac;
+  --course-amber: #fcd34d;
+  --course-pink: #f9a8d4;
+  --course-indigo: #a5b4fc;
+  
+  /* Card colors */
+  --card-text: #171717;
+  --card-text-secondary: #4b5563;
+
+  /* Why Glide + Icons Colors */
+  --why-glide-bg: #171717;
+;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+[data-theme="dark"] {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --nav-bg: #111827;
+  --nav-border: #1f2937;
+  --card-bg: #1f2937;
+  --card-border: #374151;
+  --blue-accent: #3b82f6;
+  --blue-accent-hover: #60a5fa;
+  --light-blue-hover: #c0dcfc;
+  --blue-bg: #1e3a8a;
+  --blue-border: #2563eb;
+  --text-primary: #f9fafb;
+  --text-secondary: #e5e7eb;
+  --text-tertiary: #9ca3af;
+  --red-accent: #f87171;
+  --green-accent: #34d399;
+  
+  /* Course colors - darker for dark mode */
+  --course-blue: #1e40af;
+  --course-purple: #6d28d9;
+  --course-green: #047857;
+  --course-amber: #b45309;
+  --course-pink: #be185d;
+  --course-indigo: #4338ca;
+  
+  /* Card colors */
+  --card-text: #f9fafb;
+  --card-text-secondary: #e5e7eb;
+
+  /* Why Glide + Icons Colors */
+  --why-glide-bg: #3b82f6;
+
 }
+
+
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Make all buttons show a pointer cursor when hovered */
+button {
+  cursor: pointer;
+}
+
+.smooth-scroll {
+  scroll-behavior: smooth;
+}
+
+/* Styles for the SmoothScroll component */
+.smooth-scrollbar-container {
+  height: 100vh;
+  overflow: hidden;
 }
