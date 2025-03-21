@@ -18,7 +18,16 @@ interface CachedCanvasData {
 async function fetchAllGrades(idToken: string): Promise<CanvasResource<unknown>> {
   try {
     // We'll collect all enrollments here
-    let allEnrollments: any[] = [];
+    interface Enrollment {
+      id: number;
+      course_id: number;
+      grades?: {
+        current_grade?: string;
+        current_score?: number;
+      };
+    }
+    
+    let allEnrollments: Enrollment[] = [];
     let page = 1;
     let hasMorePages = true;
     
@@ -154,7 +163,14 @@ export async function fetchAllCanvasData(): Promise<CanvasDataResponse> {
   
   // Helper function to fetch all courses with pagination
   async function fetchAllCoursesWithPagination(endpoint: string, idToken: string) {
-    let allCourses: any[] = [];
+    interface Course {
+      id: number;
+      name: string;
+      course_code: string;
+      workflow_state: string;
+    }
+    
+    let allCourses: Course[] = [];
     let page = 1;
     let hasMorePages = true;
     
@@ -235,7 +251,18 @@ export async function fetchAllCanvasData(): Promise<CanvasDataResponse> {
 async function fetchCourseGrades(courseId: string, idToken: string): Promise<CanvasResource<unknown>> {
   try {
     // We'll collect all student data here
-    let allStudents: any[] = [];
+    interface Student {
+      id: number;
+      name: string;
+      enrollments?: Array<{
+        grades?: {
+          current_grade?: string;
+          current_score?: number;
+        };
+      }>;
+    }
+    
+    let allStudents: Student[] = [];
     let page = 1;
     let hasMorePages = true;
     

@@ -1,5 +1,39 @@
 import { format, parseISO } from 'date-fns';
 
+// Define common interfaces for Canvas data types
+interface TodoItem {
+  assignment: {
+    id: number;
+    name: string;
+    due_at: string | null;
+  };
+  context_name?: string;
+}
+
+interface AnnouncementItem {
+  id: number;
+  title: string;
+  message: string;
+  posted_at: string;
+  context_code?: string;
+}
+
+// Used for upcoming events and calendar events
+export interface EventItem {
+  id: number;
+  title: string;
+  start_at: string;
+  html_url?: string;
+  context_name?: string;
+}
+
+interface EnrollmentWithGrades {
+  grades?: {
+    current_grade?: string;
+    current_score?: number;
+  };
+}
+
 // User profile types
 export interface CanvasUserProfile {
   id: number;
@@ -128,7 +162,7 @@ export async function extractCourses(canvasData: CanvasDataResponse | null): Pro
   return coursesData.map(course => {
     // Find the enrollment for this course to get the actual grade/progress
     // First check in the grades data (which should be more accurate)
-    let enrollment = allEnrollments.find(e => e.course_id === course.id);
+    const enrollment = allEnrollments.find(e => e.course_id === course.id);
     
     // Get the current score from the enrollment, or use a default value
     let progress = 0;
@@ -170,7 +204,7 @@ export function extractAssignments(canvasData: CanvasDataResponse | null): Dashb
     return [];
   }
 
-  const todoItems = canvasData.todo.data as any[];
+  const todoItems = canvasData.todo.data as TodoItem[];
   const now = new Date();
   
   return todoItems
@@ -198,7 +232,7 @@ export function extractAnnouncements(canvasData: CanvasDataResponse | null): Das
   if (!canvasData) return [];
   
   // Get announcements from the dedicated announcements endpoint
-  let announcements: any[] = [];
+  let announcements: AnnouncementItem[] = [];
   
   // The key for the announcements endpoint will be 'announcements' or the full endpoint path
   const announcementKey = Object.keys(canvasData).find(key => 
@@ -315,7 +349,7 @@ export function extractStatistics(canvasData: CanvasDataResponse | null): {
     console.log('Grades data found:', canvasData.grades.data);
     
     // The grades data is now an array of enrollments with grades
-    const enrollments = canvasData.grades.data as any[];
+    const enrollments = canvasData.grades.data as EnrollmentWithGrades[];
     
     if (Array.isArray(enrollments) && enrollments.length > 0) {
       // Map letter grades to GPA points
@@ -378,9 +412,9 @@ export function extractStatistics(canvasData: CanvasDataResponse | null): {
   return {
     gpa,
     completedCredits,
-    upcomingDeadlines: canvasData?.todo?.data ? (canvasData.todo.data as any[]).length : 0,
+    upcomingDeadlines: canvasData?.todo?.data ? (canvasData.todo.data as TodoItem[]).length : 0,
     dueThisWeek: canvasData?.todo?.data ? 
-      (canvasData.todo.data as any[])
+      (canvasData.todo.data as TodoItem[])
         .filter(item => {
           if (!item.assignment?.due_at) return false;
           const dueDate = parseISO(item.assignment.due_at);

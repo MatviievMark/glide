@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart2, CheckCircle, Clock, Plus } from 'lucide-react';
+import { BarChart2, CheckCircle, Clock } from 'lucide-react';
 import CourseEditModal from './CourseEditModal';
 import Sidebar from './Sidebar';
 import Header from './Header';
@@ -38,11 +38,12 @@ const Dashboard: React.FC<DashboardProps> = ({
   userName = 'Jane Doe',
   userMajor = 'Computer Science',
   userInitials = 'JD',
-  onLogout,
+  // onLogout not used but kept in props for API compatibility
   canvasData,
 }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [searchQuery, setSearchQuery] = useState('');
+  // searchQuery state is used by Header component's search functionality
+  const [, setSearchQuery] = useState('');
   const [courses, setCourses] = useState<DashboardCourse[]>(emptyCourses);
   const [assignments, setAssignments] = useState<DashboardAssignment[]>(emptyAssignments);
   const [announcements, setAnnouncements] = useState<DashboardAnnouncement[]>(emptyAnnouncements);
