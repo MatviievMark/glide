@@ -9,22 +9,23 @@ interface SmoothScrollProps {
 
 const SmoothScroll: React.FC<SmoothScrollProps> = ({ children }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobileOrTablet, setIsMobileOrTablet] = useState(false);
 
   useEffect(() => {
-    // Check if device is mobile (screen width less than 768px)
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
+    // Check if device is mobile or tablet (screen width less than 1024px)
+    // This will cover phones, tablets, and some small laptops
+    const checkDeviceType = () => {
+      setIsMobileOrTablet(window.innerWidth < 1024);
     };
 
     // Initial check
-    checkMobile();
+    checkDeviceType();
 
     // Add event listener for window resize
-    window.addEventListener('resize', checkMobile);
+    window.addEventListener('resize', checkDeviceType);
 
-    // Initialize scrollbar only if not on mobile
-    if (scrollRef.current && !isMobile) {
+    // Initialize scrollbar only if not on mobile or tablet
+    if (scrollRef.current && !isMobileOrTablet) {
       const scrollbar = Scrollbar.init(scrollRef.current, {
         damping: 0.1, // Lower value = smoother scrolling
         thumbMinSize: 20,
@@ -38,18 +39,18 @@ const SmoothScroll: React.FC<SmoothScrollProps> = ({ children }) => {
         if (scrollbar) {
           scrollbar.destroy();
         }
-        window.removeEventListener('resize', checkMobile);
+        window.removeEventListener('resize', checkDeviceType);
       };
     } else {
       // Clean up event listener when component unmounts
       return () => {
-        window.removeEventListener('resize', checkMobile);
+        window.removeEventListener('resize', checkDeviceType);
       };
     }
-  }, [isMobile]);
+  }, [isMobileOrTablet]);
 
   return (
-    <div ref={scrollRef} className={isMobile ? "" : "smooth-scrollbar-container"}>
+    <div ref={scrollRef} className={isMobileOrTablet ? "" : "smooth-scrollbar-container"}>
       {children}
     </div>
   );
