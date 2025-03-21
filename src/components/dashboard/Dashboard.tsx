@@ -59,11 +59,19 @@ const Dashboard: React.FC<DashboardProps> = ({
   // Extract data from Canvas API response
   useEffect(() => {
     if (canvasData) {
-      // Extract courses
-      const extractedCourses = extractCourses(canvasData);
-      if (extractedCourses.length > 0) {
-        setCourses(extractedCourses);
-      }
+      // Extract courses (async function)
+      const loadCourses = async () => {
+        try {
+          const extractedCourses = await extractCourses(canvasData);
+          if (extractedCourses.length > 0) {
+            setCourses(extractedCourses);
+          }
+        } catch (error) {
+          console.error('Error extracting courses:', error);
+        }
+      };
+      
+      loadCourses();
 
       // Extract assignments
       const extractedAssignments = extractAssignments(canvasData);

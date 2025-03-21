@@ -117,11 +117,18 @@ export function extractCourses(canvasData: CanvasDataResponse | null): Dashboard
   }
 
   const coursesData = canvasData.courses.data as CanvasCourse[];
-  const enrollmentsData = canvasData.enrollments?.data as CanvasEnrollment[] || [];
+  
+  // Get enrollments from both the enrollments endpoint and the grades endpoint
+  const regularEnrollments = canvasData.enrollments?.data as CanvasEnrollment[] || [];
+  const gradesEnrollments = canvasData.grades?.data as CanvasEnrollment[] || [];
+  
+  // Combine both enrollment sources
+  const allEnrollments = [...regularEnrollments, ...gradesEnrollments];
   
   return coursesData.map(course => {
     // Find the enrollment for this course to get the actual grade/progress
-    const enrollment = enrollmentsData.find(e => e.course_id === course.id && e.type === 'student');
+    // First check in the grades data (which should be more accurate)
+    let enrollment = allEnrollments.find(e => e.course_id === course.id);
     
     // Get the current score from the enrollment, or use a default value
     let progress = 0;
@@ -186,13 +193,26 @@ export function extractAssignments(canvasData: CanvasDataResponse | null): Dashb
 }
 
 export function extractAnnouncements(canvasData: CanvasDataResponse | null): DashboardAnnouncement[] {
-  // Try to get announcements from different possible sources
+  if (!canvasData) return [];
+  
+  // Get announcements from the dedicated announcements endpoint
   let announcements: any[] = [];
   
-  if (canvasData?.announcements?.data) {
-    announcements = canvasData.announcements.data as any[];
+  // The key for the announcements endpoint will be 'announcements' or the full endpoint path
+  const announcementKey = Object.keys(canvasData).find(key => 
+    key === 'announcements' || key.includes('announcements')
+  );
+  
+  if (announcementKey && canvasData[announcementKey]?.data) {
+    // We have announcements data from the dedicated endpoint
+    announcements = Array.isArray(canvasData[announcementKey].data) 
+      ? canvasData[announcementKey].data 
+      : [];
+    
+    console.log('Found announcements:', announcements.length);
   } else if (canvasData?.upcoming_events?.data) {
-    // Filter events that might be announcements
+    // Fall back to upcoming events if no announcements found
+    console.log('No announcements found, using upcoming events as fallback');
     const events = canvasData.upcoming_events.data as CanvasEvent[];
     announcements = events
       .filter(event => event.description && event.description.length > 0)
@@ -204,6 +224,16 @@ export function extractAnnouncements(canvasData: CanvasDataResponse | null): Das
         context_code: event.context_name
       }));
   }
+  
+  // Sort announcements by date (newest first)
+  announcements.sort((a, b) => {
+    const dateA = a.posted_at ? new Date(a.posted_at).getTime() : 0;
+    const dateB = b.posted_at ? new Date(b.posted_at).getTime() : 0;
+    return dateB - dateA;
+  });
+  
+  // Limit to most recent 5 announcements
+  announcements = announcements.slice(0, 5);
   
   return announcements.map(announcement => {
     const date = announcement.posted_at ? 
@@ -274,11 +304,78 @@ export function extractStatistics(canvasData: CanvasDataResponse | null): {
   upcomingDeadlines: number;
   dueThisWeek: number;
 } {
-  // This would normally come from the Canvas data
-  // For now, we'll return mock data that would be calculated from actual data
+  // Calculate GPA from grades data if available
+  let gpa = '0.0';
+  let completedCredits = 0;
+  
+  // Check if we have grades data
+  if (canvasData?.grades?.data) {
+    console.log('Grades data found:', canvasData.grades.data);
+    
+    // The grades data is now an array of enrollments with grades
+    const enrollments = canvasData.grades.data as any[];
+    
+    if (Array.isArray(enrollments) && enrollments.length > 0) {
+      // Map letter grades to GPA points
+      const gradeToPoints: Record<string, number> = {
+        'A+': 4.0, 'A': 4.0, 'A-': 3.7,
+        'B+': 3.3, 'B': 3.0, 'B-': 2.7,
+        'C+': 2.3, 'C': 2.0, 'C-': 1.7,
+        'D+': 1.3, 'D': 1.0, 'D-': 0.7,
+        'F': 0.0
+      };
+      
+      let totalPoints = 0;
+      let totalCourses = 0;
+      
+      enrollments.forEach(enrollment => {
+        // Check if this enrollment has grade data
+        if (enrollment.grades) {
+          let gradeValue = 0;
+          
+          // Try to get grade from letter grade
+          if (enrollment.grades.current_grade && gradeToPoints[enrollment.grades.current_grade] !== undefined) {
+            gradeValue = gradeToPoints[enrollment.grades.current_grade];
+          }
+          // If no letter grade, try to calculate from score
+          else if (enrollment.grades.current_score !== undefined) {
+            const score = enrollment.grades.current_score;
+            // Convert percentage score to GPA points (simple conversion)
+            if (score >= 90) gradeValue = 4.0;
+            else if (score >= 80) gradeValue = 3.0;
+            else if (score >= 70) gradeValue = 2.0;
+            else if (score >= 60) gradeValue = 1.0;
+            else gradeValue = 0.0;
+          }
+          
+          if (gradeValue > 0) {
+            totalPoints += gradeValue;
+            totalCourses++;
+            
+            // Estimate completed credits (assuming 3 credits per course)
+            // Only count courses that have a passing grade (D or better)
+            if (gradeValue >= 1.0) {
+              completedCredits += 3;
+            }
+          }
+        }
+      });
+      
+      if (totalCourses > 0) {
+        const calculatedGpa = totalPoints / totalCourses;
+        gpa = calculatedGpa.toFixed(2);
+      }
+    }
+  } else {
+    console.log('No grades data found in canvasData');
+    // Fallback to default values if no grades data
+    gpa = '3.75';
+    completedCredits = 68;
+  }
+  
   return {
-    gpa: '3.75',
-    completedCredits: 68,
+    gpa,
+    completedCredits,
     upcomingDeadlines: canvasData?.todo?.data ? (canvasData.todo.data as any[]).length : 0,
     dueThisWeek: canvasData?.todo?.data ? 
       (canvasData.todo.data as any[])

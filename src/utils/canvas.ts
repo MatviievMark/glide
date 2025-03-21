@@ -14,6 +14,75 @@ interface CachedCanvasData {
   timestamp: number;
 }
 
+// Helper function to fetch the current user's grades for all their courses with pagination
+async function fetchAllGrades(idToken: string): Promise<CanvasResource<unknown>> {
+  try {
+    // We'll collect all enrollments here
+    let allEnrollments: any[] = [];
+    let page = 1;
+    let hasMorePages = true;
+    
+    // Fetch all pages of enrollments
+    while (hasMorePages) {
+
+      const endpoint = `/api/v1/users/self/enrollments?include[]=grades&per_page=100&page=${page}`;
+      
+      console.log(`Fetching enrollments page ${page}`);
+      
+      const response = await fetch('/api/canvas', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ endpoint })
+      });
+
+      if (!response.ok) {
+        console.error(`Failed to fetch user's grades (page ${page}): ${response.statusText}`);
+        return { data: null, error: response.statusText };
+      }
+
+      const pageData = await response.json();
+      
+      // Check if we got any data
+      if (Array.isArray(pageData) && pageData.length > 0) {
+        console.log(`Received ${pageData.length} enrollments on page ${page}`);
+        allEnrollments = [...allEnrollments, ...pageData];
+        
+        // If we got fewer than 100 results, we've reached the last page
+        if (pageData.length < 100) {
+          hasMorePages = false;
+        } else {
+          page++;
+        }
+      } else {
+        // No more data
+        hasMorePages = false;
+      }
+    }
+    
+    if (allEnrollments.length > 0) {
+      // Filter enrollments to only include those with grade data
+      const gradesData = allEnrollments.filter(enrollment => 
+        enrollment.grades && 
+        (enrollment.grades.current_grade || enrollment.grades.current_score)
+      );
+      
+      console.log(`Total enrollments fetched: ${allEnrollments.length}`);
+      console.log(`Enrollments with grades: ${gradesData.length}`);
+      return { data: gradesData, error: null };
+    } else {
+      console.log('No enrollments with grades found for the current user');
+      return { data: [], error: null };
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`Error fetching user's grades:`, errorMessage);
+    return { data: null, error: errorMessage };
+  }
+}
+
 export async function fetchAllCanvasData(): Promise<CanvasDataResponse> {
   // Check if data exists in sessionStorage and is not expired
   const cachedData = sessionStorage.getItem('canvasData');
@@ -47,12 +116,19 @@ export async function fetchAllCanvasData(): Promise<CanvasDataResponse> {
     '/api/v1/users/self/enrollments',
     '/api/v1/users/self/favorites/courses',
     '/api/v1/users/self/communication_channels',
-    '/api/v1/users/self/profile'
+    '/api/v1/users/self/profile',
+    '/api/v1/announcements?context_codes[]=course_1&context_codes[]=course_2&context_codes[]=course_3&context_codes[]=course_4&context_codes[]=course_5&latest_only=true'
   ];
 
   // Fetch all endpoints through our API route
   const fetchPromises = endpoints.map(async (endpoint) => {
     try {
+      // For courses endpoint, handle pagination to get all courses
+      if (endpoint === '/api/v1/courses') {
+        return await fetchAllCoursesWithPagination(endpoint, idToken);
+      }
+      
+      // For other endpoints, use the standard fetch
       const response = await fetch('/api/canvas', {
         method: 'POST',
         headers: {
@@ -75,6 +151,54 @@ export async function fetchAllCanvasData(): Promise<CanvasDataResponse> {
       return { endpoint, data: null, error: errorMessage };
     }
   });
+  
+  // Helper function to fetch all courses with pagination
+  async function fetchAllCoursesWithPagination(endpoint: string, idToken: string) {
+    let allCourses: any[] = [];
+    let page = 1;
+    let hasMorePages = true;
+    
+    while (hasMorePages) {
+      const paginatedEndpoint = `${endpoint}?per_page=100&page=${page}`;
+      console.log(`Fetching courses page ${page}`);
+      
+      const response = await fetch('/api/canvas', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ endpoint: paginatedEndpoint })
+      });
+
+      if (!response.ok) {
+        console.error(`Failed to fetch courses (page ${page}): ${response.statusText}`);
+        return { endpoint, data: null, error: response.statusText };
+      }
+
+      const pageData = await response.json();
+      
+      if (Array.isArray(pageData) && pageData.length > 0) {
+        console.log(`Received ${pageData.length} courses on page ${page}`);
+        allCourses = [...allCourses, ...pageData];
+        
+        // If we got fewer than 100 results, we've reached the last page
+        if (pageData.length < 100) {
+          hasMorePages = false;
+        } else {
+          page++;
+        }
+      } else {
+        hasMorePages = false;
+      }
+    }
+    
+    console.log(`Total courses fetched: ${allCourses.length}`);
+    return { endpoint, data: allCourses, error: null };
+  }
+
+  // Fetch grades data separately
+  const gradesResult = await fetchAllGrades(idToken);
 
   // Wait for all requests to complete
   const results = await Promise.all(fetchPromises);
@@ -86,6 +210,10 @@ export async function fetchAllCanvasData(): Promise<CanvasDataResponse> {
     acc[resource] = { data, error };
     return acc;
   }, {} as CanvasDataResponse);
+
+  // Add grades data to the canvasData object
+  canvasData['grades'] = gradesResult;
+  console.log('Added grades data to canvasData:', gradesResult);
 
   // Store the data in sessionStorage with timestamp
   try {
@@ -101,6 +229,64 @@ export async function fetchAllCanvasData(): Promise<CanvasDataResponse> {
   }
 
   return canvasData;
+}
+
+// Helper function to fetch grades data for a course with pagination
+async function fetchCourseGrades(courseId: string, idToken: string): Promise<CanvasResource<unknown>> {
+  try {
+    // We'll collect all student data here
+    let allStudents: any[] = [];
+    let page = 1;
+    let hasMorePages = true;
+    
+    // Fetch all pages of student data
+    while (hasMorePages) {
+      // Use the specific endpoint for grades as mentioned in the memory
+      // Add pagination parameters to get all students
+      const endpoint = `/api/v1/courses/${courseId}/users?include[]=enrollments&enrollment_type[]=StudentEnrollment&per_page=100&page=${page}`;
+      
+      console.log(`Fetching grades for course ${courseId} - page ${page}`);
+      
+      const response = await fetch('/api/canvas', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ endpoint })
+      });
+
+      if (!response.ok) {
+        console.error(`Failed to fetch grades for course ${courseId} (page ${page}): ${response.statusText}`);
+        return { data: null, error: response.statusText };
+      }
+
+      const pageData = await response.json();
+      
+      // Check if we got any data
+      if (Array.isArray(pageData) && pageData.length > 0) {
+        console.log(`Received ${pageData.length} students on page ${page} for course ${courseId}`);
+        allStudents = [...allStudents, ...pageData];
+        
+        // If we got fewer than 100 results, we've reached the last page
+        if (pageData.length < 100) {
+          hasMorePages = false;
+        } else {
+          page++;
+        }
+      } else {
+        // No more data
+        hasMorePages = false;
+      }
+    }
+    
+    console.log(`Total students with grades fetched for course ${courseId}: ${allStudents.length}`);
+    return { data: allStudents, error: null };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`Error fetching grades for course ${courseId}:`, errorMessage);
+    return { data: null, error: errorMessage };
+  }
 }
 
 // Helper function to fetch data for a specific course
@@ -163,6 +349,9 @@ export async function fetchCourseDetails(courseId: string): Promise<CanvasDataRe
     }
   });
 
+  // Fetch grades separately using the dedicated function
+  const gradesResult = await fetchCourseGrades(courseId, idToken);
+
   const results = await Promise.all(fetchPromises);
   
   const courseData = results.reduce((acc, { endpoint, data, error }) => {
@@ -170,6 +359,9 @@ export async function fetchCourseDetails(courseId: string): Promise<CanvasDataRe
     acc[resource] = { data, error };
     return acc;
   }, {} as CanvasDataResponse);
+
+  // Add grades data to the courseData object
+  courseData['grades'] = gradesResult;
 
   // Store the course data in sessionStorage
   try {

@@ -5,6 +5,7 @@ export interface AnnouncementItemProps {
   title: string;
   date: string;
   content: string;
+  course?: string;
   onClick?: () => void;
 }
 
@@ -12,6 +13,7 @@ const AnnouncementItem: React.FC<AnnouncementItemProps> = ({
   title,
   date,
   content,
+  course,
   onClick,
 }) => {
   return (
@@ -20,7 +22,10 @@ const AnnouncementItem: React.FC<AnnouncementItemProps> = ({
       onClick={onClick}
     >
       <p className="text-sm font-medium text-gray-800">{title}</p>
-      <p className="text-xs text-gray-500 mb-1">{date}</p>
+      <div className="flex justify-between items-center mb-1">
+        <p className="text-xs text-gray-500">{date}</p>
+        {course && <p className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{course}</p>}
+      </div>
       <p className="text-sm text-gray-600">{content}</p>
     </div>
   );
