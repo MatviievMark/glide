@@ -111,7 +111,7 @@ export interface DashboardAnnouncement {
 }
 
 // Helper functions to extract and format data from Canvas API
-export function extractCourses(canvasData: CanvasDataResponse | null): DashboardCourse[] {
+export async function extractCourses(canvasData: CanvasDataResponse | null): Promise<DashboardCourse[]> {
   if (!canvasData?.courses?.data) {
     return [];
   }
@@ -153,10 +153,12 @@ export function extractCourses(canvasData: CanvasDataResponse | null): Dashboard
       instructor = course.teachers[0].display_name;
     }
     
+    // Return the course with the original name from Canvas
+    // The custom name will be applied in the Dashboard component if it exists
     return {
       id: course.id,
       code: course.course_code,
-      name: course.name,
+      name: course.name, // Original name from Canvas
       instructor,
       progress
     };

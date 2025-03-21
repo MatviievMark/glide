@@ -19,6 +19,7 @@ import {
   extractAnnouncements,
   extractStatistics
 } from '@/utils/dashboardHelpers';
+import { saveCustomCourseName, getAllCustomCourseNames } from '@/utils/courseNameUtils';
 
 // Empty arrays for when Canvas data is not yet loaded
 const emptyCourses: DashboardCourse[] = [];
@@ -62,9 +63,22 @@ const Dashboard: React.FC<DashboardProps> = ({
       // Extract courses (async function)
       const loadCourses = async () => {
         try {
+          // Extract courses from Canvas data
           const extractedCourses = await extractCourses(canvasData);
+          
           if (extractedCourses.length > 0) {
-            setCourses(extractedCourses);
+            // Load custom course names from Firestore
+            const customCourseNames = await getAllCustomCourseNames();
+            
+            // Apply custom names to courses if they exist
+            const coursesWithCustomNames = extractedCourses.map(course => {
+              if (customCourseNames[course.id]) {
+                return { ...course, name: customCourseNames[course.id] };
+              }
+              return course;
+            });
+            
+            setCourses(coursesWithCustomNames);
           }
         } catch (error) {
           console.error('Error extracting courses:', error);
@@ -102,12 +116,28 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
   };
   
-  const handleSaveCourse = (courseId: number, newName: string) => {
-    setCourses(prevCourses => 
-      prevCourses.map(course => 
-        course.id === courseId ? { ...course, name: newName } : course
-      )
-    );
+  const handleSaveCourse = async (courseId: number, newName: string) => {
+    try {
+      // Save the custom name to Firestore
+      await saveCustomCourseName(courseId, newName);
+      
+      // Update local state
+      setCourses(prevCourses => 
+        prevCourses.map(course => 
+          course.id === courseId ? { ...course, name: newName } : course
+        )
+      );
+      
+      console.log(`Course ${courseId} name updated to "${newName}" and saved to Firestore`);
+    } catch (error) {
+      console.error('Error saving custom course name:', error);
+      // Still update the UI even if Firestore save fails
+      setCourses(prevCourses => 
+        prevCourses.map(course => 
+          course.id === courseId ? { ...course, name: newName } : course
+        )
+      );
+    }
   };
 
   const handleAssignmentClick = (assignmentId: number | string) => {
