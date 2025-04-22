@@ -31,15 +31,21 @@ export interface DashboardProps {
   userMajor?: string;
   userInitials?: string;
   onLogout?: () => void;
+  onRefresh?: () => void;
   canvasData?: CanvasDataResponse | null;
+  loading?: boolean;
+  error?: string | null;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({
   userName = 'Jane Doe',
   userMajor = 'Computer Science',
   userInitials = 'JD',
-  // onLogout not used but kept in props for API compatibility
+  onLogout,
+  onRefresh,
   canvasData,
+  loading = false,
+  error = null,
 }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
   // searchQuery state is used by Header component's search functionality
@@ -53,7 +59,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     upcomingDeadlines: 6,
     dueThisWeek: 3
   });
-  
+
   // State for course edit modal
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<DashboardCourse | null>(null);
@@ -66,11 +72,11 @@ const Dashboard: React.FC<DashboardProps> = ({
         try {
           // Extract courses from Canvas data
           const extractedCourses = await extractCourses(canvasData);
-          
+
           if (extractedCourses.length > 0) {
             // Load custom course names from Firestore
             const customCourseNames = await getAllCustomCourseNames();
-            
+
             // Apply custom names to courses if they exist
             const coursesWithCustomNames = extractedCourses.map(course => {
               if (customCourseNames[course.id]) {
@@ -78,14 +84,14 @@ const Dashboard: React.FC<DashboardProps> = ({
               }
               return course;
             });
-            
+
             setCourses(coursesWithCustomNames);
           }
         } catch (error) {
           console.error('Error extracting courses:', error);
         }
       };
-      
+
       loadCourses();
 
       // Extract assignments
@@ -116,25 +122,25 @@ const Dashboard: React.FC<DashboardProps> = ({
       setIsEditModalOpen(true);
     }
   };
-  
+
   const handleSaveCourse = async (courseId: number, newName: string) => {
     try {
       // Save the custom name to Firestore
       await saveCustomCourseName(courseId, newName);
-      
+
       // Update local state
-      setCourses(prevCourses => 
-        prevCourses.map(course => 
+      setCourses(prevCourses =>
+        prevCourses.map(course =>
           course.id === courseId ? { ...course, name: newName } : course
         )
       );
-      
+
       console.log(`Course ${courseId} name updated to "${newName}" and saved to Firestore`);
     } catch (error) {
       console.error('Error saving custom course name:', error);
       // Still update the UI even if Firestore save fails
-      setCourses(prevCourses => 
-        prevCourses.map(course => 
+      setCourses(prevCourses =>
+        prevCourses.map(course =>
           course.id === courseId ? { ...course, name: newName } : course
         )
       );
@@ -163,30 +169,66 @@ const Dashboard: React.FC<DashboardProps> = ({
           onSave={handleSaveCourse}
         />
       )}
-      
+
       {/* Left Sidebar */}
-      <Sidebar 
+      <Sidebar
         activeTab={activeTab}
         onTabChange={setActiveTab}
         userName={userName}
         userMajor={userMajor}
         userInitials={userInitials}
       />
-      
+
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Header */}
-        <Header 
+        <Header
           onSearchChange={setSearchQuery}
           onNotificationsClick={() => console.log('Notifications clicked')}
           onProfileClick={() => console.log('Profile clicked')}
           hasNotifications={true}
         />
-        
+
         {/* Dashboard Content */}
         <main className="flex-1 overflow-auto p-6">
-          <h2 className="text-2xl font-bold text-gray-800 mb-6">Dashboard</h2>
-          
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold text-gray-800">Dashboard</h2>
+            <div className="flex space-x-2">
+              {onRefresh && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={onRefresh}
+                  disabled={loading}
+                >
+                  {loading ? 'Refreshing...' : 'Refresh Data'}
+                </Button>
+              )}
+              {onLogout && (
+                <Button
+                  variant="subtle"
+                  size="sm"
+                  onClick={onLogout}
+                >
+                  Logout
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Loading and Error States */}
+          {loading && (
+            <div className="bg-blue-50 text-blue-700 p-4 rounded-md mb-6">
+              Loading Canvas data...
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-red-50 text-red-700 p-4 rounded-md mb-6">
+              {error}
+            </div>
+          )}
+
           {/* Current Courses - Prioritized at the top */}
           <Card className="mb-8">
             <CardHeader>
@@ -217,7 +259,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               </div>
             </CardContent>
           </Card>
-          
+
           {/* Secondary Content - As you scroll down */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
             {/* Upcoming Assignments - Now in main flow */}
@@ -246,7 +288,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 </CardContent>
               </Card>
             </div>
-            
+
             {/* Announcements - Now in main flow */}
             <div>
               <Card>
@@ -270,7 +312,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               </Card>
             </div>
           </div>
-          
+
           {/* Progress Metrics - At the bottom as you scroll down */}
           <h3 className="text-xl font-bold text-gray-800 mb-4">Your Progress</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -283,7 +325,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               subtitleColor="success"
               variant="success"
             />
-            
+
             <StatCard
               title="Completed Credits"
               value={stats.completedCredits.toString()}
@@ -291,7 +333,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               subtitle="of 120 required"
               variant="info"
             />
-            
+
             <StatCard
               title="Upcoming Deadlines"
               value={stats.upcomingDeadlines.toString()}

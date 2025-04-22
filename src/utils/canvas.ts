@@ -26,18 +26,18 @@ async function fetchAllGrades(idToken: string): Promise<CanvasResource<unknown>>
         current_score?: number;
       };
     }
-    
+
     let allEnrollments: Enrollment[] = [];
     let page = 1;
     let hasMorePages = true;
-    
+
     // Fetch all pages of enrollments
     while (hasMorePages) {
 
       const endpoint = `/api/v1/users/self/enrollments?include[]=grades&per_page=100&page=${page}`;
-      
+
       console.log(`Fetching enrollments page ${page}`);
-      
+
       const response = await fetch('/api/canvas', {
         method: 'POST',
         headers: {
@@ -53,12 +53,12 @@ async function fetchAllGrades(idToken: string): Promise<CanvasResource<unknown>>
       }
 
       const pageData = await response.json();
-      
+
       // Check if we got any data
       if (Array.isArray(pageData) && pageData.length > 0) {
         console.log(`Received ${pageData.length} enrollments on page ${page}`);
         allEnrollments = [...allEnrollments, ...pageData];
-        
+
         // If we got fewer than 100 results, we've reached the last page
         if (pageData.length < 100) {
           hasMorePages = false;
@@ -70,14 +70,14 @@ async function fetchAllGrades(idToken: string): Promise<CanvasResource<unknown>>
         hasMorePages = false;
       }
     }
-    
+
     if (allEnrollments.length > 0) {
       // Filter enrollments to only include those with grade data
-      const gradesData = allEnrollments.filter(enrollment => 
-        enrollment.grades && 
+      const gradesData = allEnrollments.filter(enrollment =>
+        enrollment.grades &&
         (enrollment.grades.current_grade || enrollment.grades.current_score)
       );
-      
+
       console.log(`Total enrollments fetched: ${allEnrollments.length}`);
       console.log(`Enrollments with grades: ${gradesData.length}`);
       return { data: gradesData, error: null };
@@ -92,7 +92,95 @@ async function fetchAllGrades(idToken: string): Promise<CanvasResource<unknown>>
   }
 }
 
+// New function to fetch all Canvas data from the Python backend
+export async function fetchAllCanvasDataFromBackend(): Promise<CanvasDataResponse> {
+  // Check if data exists in sessionStorage and is not expired
+  const cachedData = sessionStorage.getItem('canvasData');
+  if (cachedData && !isCacheExpired()) {
+    try {
+      const parsed: CachedCanvasData = JSON.parse(cachedData);
+      console.log('Using cached Canvas data from sessionStorage');
+      return parsed.data;
+    } catch (error) {
+      console.error('Error parsing cached Canvas data:', error);
+      // Continue with fetching fresh data if parsing fails
+    }
+  }
+
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error('No authenticated user found');
+  }
+
+  // Get the user's ID token
+  const idToken = await currentUser.getIdToken();
+
+  try {
+    console.log('Fetching all Canvas data from Python backend');
+
+    // First, initialize the Canvas API for this user
+    const initResponse = await fetch('/api/canvas', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${idToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ endpoint: '/api/v1/users/self' }) // Any endpoint will work to initialize
+    });
+
+    if (!initResponse.ok) {
+      console.error('Failed to initialize Canvas API:', initResponse.statusText);
+      return {};
+    }
+
+    // Now fetch all data from the Python backend
+    const response = await fetch('/api/canvas', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${idToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ endpoint: '/api/v1/all-data' }) // Special endpoint for all data
+    });
+
+    if (!response.ok) {
+      console.error('Failed to fetch all Canvas data:', response.statusText);
+      return {};
+    }
+
+    const allData = await response.json();
+    console.log('Received all Canvas data from Python backend');
+
+    // Store the data in sessionStorage with timestamp
+    try {
+      const cacheObject: CachedCanvasData = {
+        data: allData,
+        timestamp: Date.now()
+      };
+      sessionStorage.setItem('canvasData', JSON.stringify(cacheObject));
+      console.log('Canvas data cached in sessionStorage');
+    } catch (error) {
+      console.error('Error caching Canvas data:', error);
+      // If storage fails (e.g., quota exceeded), we can still return the data
+    }
+
+    return allData;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Error fetching all Canvas data:', errorMessage);
+    return {};
+  }
+}
+
+// Keep the original function for backward compatibility
 export async function fetchAllCanvasData(): Promise<CanvasDataResponse> {
+  // Try to use the new backend function first
+  try {
+    return await fetchAllCanvasDataFromBackend();
+  } catch (error) {
+    console.warn('Error using new backend, falling back to original implementation:', error);
+  }
+
   // Check if data exists in sessionStorage and is not expired
   const cachedData = sessionStorage.getItem('canvasData');
   if (cachedData) {
@@ -136,7 +224,7 @@ export async function fetchAllCanvasData(): Promise<CanvasDataResponse> {
       if (endpoint === '/api/v1/courses') {
         return await fetchAllCoursesWithPagination(endpoint, idToken);
       }
-      
+
       // For other endpoints, use the standard fetch
       const response = await fetch('/api/canvas', {
         method: 'POST',
@@ -160,7 +248,7 @@ export async function fetchAllCanvasData(): Promise<CanvasDataResponse> {
       return { endpoint, data: null, error: errorMessage };
     }
   });
-  
+
   // Helper function to fetch all courses with pagination
   async function fetchAllCoursesWithPagination(endpoint: string, idToken: string) {
     interface Course {
@@ -169,15 +257,15 @@ export async function fetchAllCanvasData(): Promise<CanvasDataResponse> {
       course_code: string;
       workflow_state: string;
     }
-    
+
     let allCourses: Course[] = [];
     let page = 1;
     let hasMorePages = true;
-    
+
     while (hasMorePages) {
       const paginatedEndpoint = `${endpoint}?per_page=100&page=${page}`;
       console.log(`Fetching courses page ${page}`);
-      
+
       const response = await fetch('/api/canvas', {
         method: 'POST',
         headers: {
@@ -193,11 +281,11 @@ export async function fetchAllCanvasData(): Promise<CanvasDataResponse> {
       }
 
       const pageData = await response.json();
-      
+
       if (Array.isArray(pageData) && pageData.length > 0) {
         console.log(`Received ${pageData.length} courses on page ${page}`);
         allCourses = [...allCourses, ...pageData];
-        
+
         // If we got fewer than 100 results, we've reached the last page
         if (pageData.length < 100) {
           hasMorePages = false;
@@ -208,7 +296,7 @@ export async function fetchAllCanvasData(): Promise<CanvasDataResponse> {
         hasMorePages = false;
       }
     }
-    
+
     console.log(`Total courses fetched: ${allCourses.length}`);
     return { endpoint, data: allCourses, error: null };
   }
@@ -261,19 +349,19 @@ async function fetchCourseGrades(courseId: string, idToken: string): Promise<Can
         };
       }>;
     }
-    
+
     let allStudents: Student[] = [];
     let page = 1;
     let hasMorePages = true;
-    
+
     // Fetch all pages of student data
     while (hasMorePages) {
       // Use the specific endpoint for grades as mentioned in the memory
       // Add pagination parameters to get all students
       const endpoint = `/api/v1/courses/${courseId}/users?include[]=enrollments&enrollment_type[]=StudentEnrollment&per_page=100&page=${page}`;
-      
+
       console.log(`Fetching grades for course ${courseId} - page ${page}`);
-      
+
       const response = await fetch('/api/canvas', {
         method: 'POST',
         headers: {
@@ -289,12 +377,12 @@ async function fetchCourseGrades(courseId: string, idToken: string): Promise<Can
       }
 
       const pageData = await response.json();
-      
+
       // Check if we got any data
       if (Array.isArray(pageData) && pageData.length > 0) {
         console.log(`Received ${pageData.length} students on page ${page} for course ${courseId}`);
         allStudents = [...allStudents, ...pageData];
-        
+
         // If we got fewer than 100 results, we've reached the last page
         if (pageData.length < 100) {
           hasMorePages = false;
@@ -306,7 +394,7 @@ async function fetchCourseGrades(courseId: string, idToken: string): Promise<Can
         hasMorePages = false;
       }
     }
-    
+
     console.log(`Total students with grades fetched for course ${courseId}: ${allStudents.length}`);
     return { data: allStudents, error: null };
   } catch (error) {
@@ -316,8 +404,80 @@ async function fetchCourseGrades(courseId: string, idToken: string): Promise<Can
   }
 }
 
+// New function to fetch course details from the Python backend
+export async function fetchCourseDetailsFromBackend(courseId: string): Promise<CanvasDataResponse> {
+  // Check if course data exists in sessionStorage
+  const cacheKey = `courseData_${courseId}`;
+  const cachedData = sessionStorage.getItem(cacheKey);
+  if (cachedData && !isCacheExpired(30, cacheKey)) {
+    try {
+      const parsed: CachedCanvasData = JSON.parse(cachedData);
+      console.log(`Using cached data for course ${courseId}`);
+      return parsed.data;
+    } catch (error) {
+      console.error('Error parsing cached course data:', error);
+      // Continue with fetching fresh data if parsing fails
+    }
+  }
+
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error('No authenticated user found');
+  }
+
+  // Get the user's ID token
+  const idToken = await currentUser.getIdToken();
+
+  try {
+    console.log(`Fetching complete data for course ${courseId} from Python backend`);
+
+    // Fetch complete class data from the Python backend
+    const response = await fetch('/api/canvas', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${idToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ endpoint: `/api/v1/complete-class-data/${courseId}` })
+    });
+
+    if (!response.ok) {
+      console.error(`Failed to fetch complete data for course ${courseId}:`, response.statusText);
+      return {};
+    }
+
+    const courseData = await response.json();
+    console.log(`Received complete data for course ${courseId} from Python backend`);
+
+    // Store the course data in sessionStorage
+    try {
+      const cacheObject: CachedCanvasData = {
+        data: courseData,
+        timestamp: Date.now()
+      };
+      sessionStorage.setItem(cacheKey, JSON.stringify(cacheObject));
+      console.log(`Course ${courseId} data cached in sessionStorage`);
+    } catch (error) {
+      console.error('Error caching course data:', error);
+    }
+
+    return courseData;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`Error fetching complete data for course ${courseId}:`, errorMessage);
+    return {};
+  }
+}
+
 // Helper function to fetch data for a specific course
 export async function fetchCourseDetails(courseId: string): Promise<CanvasDataResponse> {
+  // Try to use the new backend function first
+  try {
+    return await fetchCourseDetailsFromBackend(courseId);
+  } catch (error) {
+    console.warn(`Error using new backend for course ${courseId}, falling back to original implementation:`, error);
+  }
+
   // Check if course data exists in sessionStorage
   const cacheKey = `courseData_${courseId}`;
   const cachedData = sessionStorage.getItem(cacheKey);
@@ -339,7 +499,7 @@ export async function fetchCourseDetails(courseId: string): Promise<CanvasDataRe
 
   // Get the user's ID token
   const idToken = await currentUser.getIdToken();
-  
+
   const courseEndpoints = [
     `/api/v1/courses/${courseId}`,
     `/api/v1/courses/${courseId}/assignments`,
@@ -380,7 +540,7 @@ export async function fetchCourseDetails(courseId: string): Promise<CanvasDataRe
   const gradesResult = await fetchCourseGrades(courseId, idToken);
 
   const results = await Promise.all(fetchPromises);
-  
+
   const courseData = results.reduce((acc, { endpoint, data, error }) => {
     const resource = endpoint.split('/').pop() || endpoint;
     acc[resource] = { data, error };
@@ -409,31 +569,31 @@ export async function fetchCourseDetails(courseId: string): Promise<CanvasDataRe
 export function clearCanvasCache(): void {
   // Clear all Canvas-related data from sessionStorage
   const keysToRemove: string[] = [];
-  
+
   for (let i = 0; i < sessionStorage.length; i++) {
     const key = sessionStorage.key(i);
     if (key && (key === 'canvasData' || key.startsWith('courseData_'))) {
       keysToRemove.push(key);
     }
   }
-  
+
   keysToRemove.forEach(key => sessionStorage.removeItem(key));
   console.log('Canvas cache cleared');
 }
 
-export function isCacheExpired(maxAgeMinutes: number = 30): boolean {
-  const cachedData = sessionStorage.getItem('canvasData');
+export function isCacheExpired(maxAgeMinutes: number = 30, cacheKey: string = 'canvasData'): boolean {
+  const cachedData = sessionStorage.getItem(cacheKey);
   if (!cachedData) return true;
-  
+
   try {
     const parsed: CachedCanvasData = JSON.parse(cachedData);
     const now = Date.now();
     const ageMs = now - parsed.timestamp;
     const ageMinutes = ageMs / (1000 * 60);
-    
+
     return ageMinutes > maxAgeMinutes;
   } catch (error) {
-    console.error('Error checking cache expiration:', error);
+    console.error(`Error checking cache expiration for ${cacheKey}:`, error);
     return true;
   }
 }

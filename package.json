@@ -4,12 +4,18 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:backend": "cd backend && python app.py",
+    "dev:all": "concurrently \"npm run dev\" \"npm run dev:backend\"",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "start:backend": "cd backend && gunicorn app:app",
+    "start:all": "concurrently \"npm run start\" \"npm run start:backend\"",
+    "lint": "next lint",
+    "setup:backend": "cd backend && pip install -r requirements.txt"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
+    "concurrently": "^8.2.2",
     "date-fns": "^4.1.0",
     "firebase": "^11.4.0",
     "firebase-admin": "^12.0.0",

@@ -1,24 +1,60 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Glide - Canvas LMS Integration
+
+Glide is a web application that integrates with Canvas LMS to provide a streamlined interface for students to access their courses, assignments, and other Canvas data.
+
+## Project Structure
+
+This project consists of two main parts:
+
+1. **Frontend**: A Next.js application that provides the user interface
+2. **Backend**: A Python Flask application that handles Canvas API interactions using the canvasapi library
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js (v18 or later)
+- Python (v3.8 or later)
+- Canvas API access (URL and API key)
+
+### Setup
+
+1. Install frontend dependencies:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Set up the Python backend:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run setup:backend
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+3. Create environment files:
+   - Copy `.env.example` to `.env` in the project root for Next.js
+   - Copy `backend/.env.example` to `backend/.env` for the Python backend
+
+### Running the Application
+
+To run both the frontend and backend together:
+
+```bash
+npm run dev:all
+```
+
+Or run them separately:
+
+```bash
+# Frontend only
+npm run dev
+
+# Backend only
+npm run dev:backend
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the frontend.
+The backend API will be available at [http://localhost:5000](http://localhost:5000).
 
 ## Learn More
 
