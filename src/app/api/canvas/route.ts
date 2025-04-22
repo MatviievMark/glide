@@ -147,7 +147,7 @@ export async function POST(request: Request) {
       pythonEndpoint = '/api/canvas/calendar-events';
     } else if (endpoint === '/api/v1/users/self/groups') {
       pythonEndpoint = '/api/canvas/groups';
-    } else if (endpoint === '/api/v1/users/self/enrollments') {
+    } else if (endpoint === '/api/v1/users/self/enrollments' || endpoint.includes('/api/v1/users/self/enrollments')) {
       pythonEndpoint = '/api/canvas/enrollments';
     } else if (endpoint === '/api/v1/users/self/favorites/courses') {
       pythonEndpoint = '/api/canvas/favorite-courses';

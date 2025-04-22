@@ -67,25 +67,33 @@ const Dashboard: React.FC<DashboardProps> = ({
   // Extract data from Canvas API response
   useEffect(() => {
     if (canvasData) {
+      console.log('Dashboard received canvasData:', Object.keys(canvasData));
+
       // Extract courses (async function)
       const loadCourses = async () => {
         try {
           // Extract courses from Canvas data
           const extractedCourses = await extractCourses(canvasData);
+          console.log('Extracted courses:', extractedCourses);
 
           if (extractedCourses.length > 0) {
             // Load custom course names from Firestore
             const customCourseNames = await getAllCustomCourseNames();
+            console.log('Custom course names:', customCourseNames);
 
             // Apply custom names to courses if they exist
             const coursesWithCustomNames = extractedCourses.map(course => {
               if (customCourseNames[course.id]) {
+                console.log(`Applying custom name for course ${course.id}: ${customCourseNames[course.id]}`);
                 return { ...course, name: customCourseNames[course.id] };
               }
               return course;
             });
 
+            console.log('Final courses with custom names:', coursesWithCustomNames);
             setCourses(coursesWithCustomNames);
+          } else {
+            console.log('No courses extracted from Canvas data');
           }
         } catch (error) {
           console.error('Error extracting courses:', error);
@@ -96,18 +104,21 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       // Extract assignments
       const extractedAssignments = extractAssignments(canvasData);
+      console.log('Extracted assignments:', extractedAssignments.length);
       if (extractedAssignments.length > 0) {
         setAssignments(extractedAssignments);
       }
 
       // Extract announcements
       const extractedAnnouncements = extractAnnouncements(canvasData);
+      console.log('Extracted announcements:', extractedAnnouncements.length);
       if (extractedAnnouncements.length > 0) {
         setAnnouncements(extractedAnnouncements);
       }
 
       // Extract statistics
       const extractedStats = extractStatistics(canvasData);
+      console.log('Extracted stats:', extractedStats);
       setStats(extractedStats);
     }
   }, [canvasData]);

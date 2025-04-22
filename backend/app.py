@@ -369,6 +369,32 @@ def get_upcoming_events():
     except Exception as e:
         return jsonify({"data": None, "error": str(e)}), 500
 
+@app.route('/api/canvas/enrollments', methods=['GET'])
+def get_enrollments():
+    """Get the current user's enrollments with grades"""
+    user_id = request.args.get('user_id')
+
+    if not user_id:
+        return jsonify({"error": "Missing user_id parameter"}), 400
+
+    canvas_manager = get_canvas_manager(user_id)
+    if not canvas_manager:
+        return jsonify({"error": "Canvas API not initialized for this user"}), 400
+
+    try:
+        enrollments = []
+        for enrollment in canvas_manager.user.get_enrollments():
+            enrollments.append({
+                'id': enrollment.id,
+                'course_id': enrollment.course_id,
+                'type': enrollment.type,
+                'role': enrollment.role,
+                'grades': getattr(enrollment, 'grades', None)
+            })
+        return jsonify({"data": enrollments, "error": None})
+    except Exception as e:
+        return jsonify({"data": None, "error": str(e)}), 500
+
 @app.route('/api/canvas/find-course-id', methods=['GET'])
 def find_course_id():
     """Find a course ID by name"""

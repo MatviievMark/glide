@@ -38,16 +38,16 @@ export interface CourseCardProps
 }
 
 const CourseCard = React.forwardRef<HTMLDivElement, CourseCardProps>(
-  ({ 
-    className, 
-    color, 
-    courseCode, 
-    courseName, 
-    instructor, 
-    progress, 
+  ({
+    className,
+    color,
+    courseCode,
+    courseName,
+    instructor,
+    progress,
     isAddCard = false,
     onSettingsClick,
-    ...props 
+    ...props
   }, ref) => {
     if (isAddCard) {
       return (
@@ -79,9 +79,9 @@ const CourseCard = React.forwardRef<HTMLDivElement, CourseCardProps>(
             })()}
           </div>
         )}
-        
+
         {onSettingsClick && (
-          <button 
+          <button
             className="absolute top-2 right-2 hover:opacity-80"
             onClick={(e) => {
               e.stopPropagation();
@@ -91,12 +91,14 @@ const CourseCard = React.forwardRef<HTMLDivElement, CourseCardProps>(
             <Settings className="w-4 h-4" />
           </button>
         )}
-        
+
         <div className="flex flex-col items-center justify-center text-center h-full">
-          <h4 className="font-bold text-lg mb-2">{courseName}</h4>
-          <p className="text-sm opacity-80">{instructor}</p>
+          <h4 className="font-bold text-lg mb-2">
+            {courseName || 'Unnamed Course'}
+          </h4>
+          <p className="text-sm opacity-80">{instructor || 'No instructor'}</p>
         </div>
-        
+
         {progress !== undefined && (
           <div className="absolute bottom-2 right-2 text-xs font-semibold bg-white bg-opacity-50 px-2 py-1 rounded shadow-sm">
             {progress}%

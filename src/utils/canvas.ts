@@ -92,7 +92,7 @@ async function fetchAllGrades(idToken: string): Promise<CanvasResource<unknown>>
   }
 }
 
-// New function to fetch all Canvas data from the Python backend
+// Function to fetch all Canvas data from the Python backend
 export async function fetchAllCanvasDataFromBackend(): Promise<CanvasDataResponse> {
   // Check if data exists in sessionStorage and is not expired
   const cachedData = sessionStorage.getItem('canvasData');
@@ -151,6 +151,9 @@ export async function fetchAllCanvasDataFromBackend(): Promise<CanvasDataRespons
     const allData = await response.json();
     console.log('Received all Canvas data from Python backend');
 
+    // Log the structure of the data for debugging
+    console.log('Canvas data structure:', Object.keys(allData));
+
     // Store the data in sessionStorage with timestamp
     try {
       const cacheObject: CachedCanvasData = {
@@ -172,167 +175,9 @@ export async function fetchAllCanvasDataFromBackend(): Promise<CanvasDataRespons
   }
 }
 
-// Keep the original function for backward compatibility
+// Main function to fetch all Canvas data - always uses the backend
 export async function fetchAllCanvasData(): Promise<CanvasDataResponse> {
-  // Try to use the new backend function first
-  try {
-    return await fetchAllCanvasDataFromBackend();
-  } catch (error) {
-    console.warn('Error using new backend, falling back to original implementation:', error);
-  }
-
-  // Check if data exists in sessionStorage and is not expired
-  const cachedData = sessionStorage.getItem('canvasData');
-  if (cachedData) {
-    try {
-      const parsed: CachedCanvasData = JSON.parse(cachedData);
-      console.log('Using cached Canvas data from sessionStorage');
-      return parsed.data;
-    } catch (error) {
-      console.error('Error parsing cached Canvas data:', error);
-      // Continue with fetching fresh data if parsing fails
-    }
-  }
-
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
-    throw new Error('No authenticated user found');
-  }
-
-  // Get the user's ID token
-  const idToken = await currentUser.getIdToken();
-
-  // List of all endpoints we want to fetch
-  const endpoints = [
-    '/api/v1/courses',
-    '/api/v1/users/self',
-    '/api/v1/users/self/todo',
-    '/api/v1/users/self/upcoming_events',
-    '/api/v1/users/self/calendar_events',
-    '/api/v1/users/self/groups',
-    '/api/v1/users/self/enrollments',
-    '/api/v1/users/self/favorites/courses',
-    '/api/v1/users/self/communication_channels',
-    '/api/v1/users/self/profile',
-    '/api/v1/announcements?context_codes[]=course_1&context_codes[]=course_2&context_codes[]=course_3&context_codes[]=course_4&context_codes[]=course_5&latest_only=true'
-  ];
-
-  // Fetch all endpoints through our API route
-  const fetchPromises = endpoints.map(async (endpoint) => {
-    try {
-      // For courses endpoint, handle pagination to get all courses
-      if (endpoint === '/api/v1/courses') {
-        return await fetchAllCoursesWithPagination(endpoint, idToken);
-      }
-
-      // For other endpoints, use the standard fetch
-      const response = await fetch('/api/canvas', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${idToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ endpoint })
-      });
-
-      if (!response.ok) {
-        console.error(`Failed to fetch ${endpoint}: ${response.statusText}`);
-        return { endpoint, data: null, error: response.statusText };
-      }
-
-      const data = await response.json();
-      return { endpoint, data, error: null };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`Error fetching ${endpoint}:`, errorMessage);
-      return { endpoint, data: null, error: errorMessage };
-    }
-  });
-
-  // Helper function to fetch all courses with pagination
-  async function fetchAllCoursesWithPagination(endpoint: string, idToken: string) {
-    interface Course {
-      id: number;
-      name: string;
-      course_code: string;
-      workflow_state: string;
-    }
-
-    let allCourses: Course[] = [];
-    let page = 1;
-    let hasMorePages = true;
-
-    while (hasMorePages) {
-      const paginatedEndpoint = `${endpoint}?per_page=100&page=${page}`;
-      console.log(`Fetching courses page ${page}`);
-
-      const response = await fetch('/api/canvas', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${idToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ endpoint: paginatedEndpoint })
-      });
-
-      if (!response.ok) {
-        console.error(`Failed to fetch courses (page ${page}): ${response.statusText}`);
-        return { endpoint, data: null, error: response.statusText };
-      }
-
-      const pageData = await response.json();
-
-      if (Array.isArray(pageData) && pageData.length > 0) {
-        console.log(`Received ${pageData.length} courses on page ${page}`);
-        allCourses = [...allCourses, ...pageData];
-
-        // If we got fewer than 100 results, we've reached the last page
-        if (pageData.length < 100) {
-          hasMorePages = false;
-        } else {
-          page++;
-        }
-      } else {
-        hasMorePages = false;
-      }
-    }
-
-    console.log(`Total courses fetched: ${allCourses.length}`);
-    return { endpoint, data: allCourses, error: null };
-  }
-
-  // Fetch grades data separately
-  const gradesResult = await fetchAllGrades(idToken);
-
-  // Wait for all requests to complete
-  const results = await Promise.all(fetchPromises);
-
-  // Organize results into a structured object
-  const canvasData = results.reduce((acc, { endpoint, data, error }) => {
-    // Extract the main resource name from the endpoint
-    const resource = endpoint.split('/').pop() || endpoint;
-    acc[resource] = { data, error };
-    return acc;
-  }, {} as CanvasDataResponse);
-
-  // Add grades data to the canvasData object
-  canvasData['grades'] = gradesResult;
-  console.log('Added grades data to canvasData:', gradesResult);
-
-  // Store the data in sessionStorage with timestamp
-  try {
-    const cacheObject: CachedCanvasData = {
-      data: canvasData,
-      timestamp: Date.now()
-    };
-    sessionStorage.setItem('canvasData', JSON.stringify(cacheObject));
-    console.log('Canvas data cached in sessionStorage');
-  } catch (error) {
-    console.error('Error caching Canvas data:', error);
-    // If storage fails (e.g., quota exceeded), we can still return the data
-  }
-
-  return canvasData;
+  return await fetchAllCanvasDataFromBackend();
 }
 
 // Helper function to fetch grades data for a course with pagination
@@ -404,7 +249,7 @@ async function fetchCourseGrades(courseId: string, idToken: string): Promise<Can
   }
 }
 
-// New function to fetch course details from the Python backend
+// Function to fetch course details from the Python backend
 export async function fetchCourseDetailsFromBackend(courseId: string): Promise<CanvasDataResponse> {
   // Check if course data exists in sessionStorage
   const cacheKey = `courseData_${courseId}`;
@@ -449,6 +294,9 @@ export async function fetchCourseDetailsFromBackend(courseId: string): Promise<C
     const courseData = await response.json();
     console.log(`Received complete data for course ${courseId} from Python backend`);
 
+    // Log the structure of the course data for debugging
+    console.log(`Course ${courseId} data structure:`, Object.keys(courseData));
+
     // Store the course data in sessionStorage
     try {
       const cacheObject: CachedCanvasData = {
@@ -469,100 +317,9 @@ export async function fetchCourseDetailsFromBackend(courseId: string): Promise<C
   }
 }
 
-// Helper function to fetch data for a specific course
+// Helper function to fetch data for a specific course - always uses the backend
 export async function fetchCourseDetails(courseId: string): Promise<CanvasDataResponse> {
-  // Try to use the new backend function first
-  try {
-    return await fetchCourseDetailsFromBackend(courseId);
-  } catch (error) {
-    console.warn(`Error using new backend for course ${courseId}, falling back to original implementation:`, error);
-  }
-
-  // Check if course data exists in sessionStorage
-  const cacheKey = `courseData_${courseId}`;
-  const cachedData = sessionStorage.getItem(cacheKey);
-  if (cachedData) {
-    try {
-      const parsed: CachedCanvasData = JSON.parse(cachedData);
-      console.log(`Using cached data for course ${courseId}`);
-      return parsed.data;
-    } catch (error) {
-      console.error('Error parsing cached course data:', error);
-      // Continue with fetching fresh data if parsing fails
-    }
-  }
-
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
-    throw new Error('No authenticated user found');
-  }
-
-  // Get the user's ID token
-  const idToken = await currentUser.getIdToken();
-
-  const courseEndpoints = [
-    `/api/v1/courses/${courseId}`,
-    `/api/v1/courses/${courseId}/assignments`,
-    `/api/v1/courses/${courseId}/modules`,
-    `/api/v1/courses/${courseId}/discussion_topics`,
-    `/api/v1/courses/${courseId}/students`,
-    `/api/v1/courses/${courseId}/files`,
-    `/api/v1/courses/${courseId}/quizzes`,
-    `/api/v1/courses/${courseId}/announcements`
-  ];
-
-  const fetchPromises = courseEndpoints.map(async (endpoint) => {
-    try {
-      const response = await fetch('/api/canvas', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${idToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ endpoint })
-      });
-
-      if (!response.ok) {
-        console.error(`Failed to fetch ${endpoint}: ${response.statusText}`);
-        return { endpoint, data: null, error: response.statusText };
-      }
-
-      const data = await response.json();
-      return { endpoint, data, error: null };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`Error fetching ${endpoint}:`, errorMessage);
-      return { endpoint, data: null, error: errorMessage };
-    }
-  });
-
-  // Fetch grades separately using the dedicated function
-  const gradesResult = await fetchCourseGrades(courseId, idToken);
-
-  const results = await Promise.all(fetchPromises);
-
-  const courseData = results.reduce((acc, { endpoint, data, error }) => {
-    const resource = endpoint.split('/').pop() || endpoint;
-    acc[resource] = { data, error };
-    return acc;
-  }, {} as CanvasDataResponse);
-
-  // Add grades data to the courseData object
-  courseData['grades'] = gradesResult;
-
-  // Store the course data in sessionStorage
-  try {
-    const cacheObject: CachedCanvasData = {
-      data: courseData,
-      timestamp: Date.now()
-    };
-    sessionStorage.setItem(cacheKey, JSON.stringify(cacheObject));
-    console.log(`Course ${courseId} data cached in sessionStorage`);
-  } catch (error) {
-    console.error('Error caching course data:', error);
-  }
-
-  return courseData;
+  return await fetchCourseDetailsFromBackend(courseId);
 }
 
 // Add utility functions for cache management
@@ -578,7 +335,7 @@ export function clearCanvasCache(): void {
   }
 
   keysToRemove.forEach(key => sessionStorage.removeItem(key));
-  console.log('Canvas cache cleared');
+  console.log(`Canvas cache cleared (${keysToRemove.length} items removed)`);
 }
 
 export function isCacheExpired(maxAgeMinutes: number = 30, cacheKey: string = 'canvasData'): boolean {
@@ -590,6 +347,9 @@ export function isCacheExpired(maxAgeMinutes: number = 30, cacheKey: string = 'c
     const now = Date.now();
     const ageMs = now - parsed.timestamp;
     const ageMinutes = ageMs / (1000 * 60);
+
+    // Log cache status for debugging
+    console.log(`Cache ${cacheKey} age: ${ageMinutes.toFixed(2)} minutes (max: ${maxAgeMinutes} minutes)`);
 
     return ageMinutes > maxAgeMinutes;
   } catch (error) {

@@ -38,10 +38,19 @@ export default function DashboardPage() {
         // Fetch data from the Python backend
         const data = await fetchAllCanvasDataFromBackend();
 
-        if (Object.keys(data).length === 0) {
+        if (!data || Object.keys(data).length === 0) {
+          console.error('Empty Canvas data received');
           setError('Failed to fetch Canvas data. Please try again later.');
         } else {
           console.log('Canvas data loaded successfully');
+          console.log('Canvas data keys:', Object.keys(data));
+
+          // Log a sample of the data structure
+          const sampleKey = Object.keys(data)[0];
+          if (sampleKey) {
+            console.log(`Sample data structure for ${sampleKey}:`, data[sampleKey]);
+          }
+
           setCanvasData(data);
 
           // Extract user profile information from Canvas data
@@ -89,14 +98,23 @@ export default function DashboardPage() {
     setError(null);
 
     try {
+      console.log('Manually refreshing Canvas data...');
       const data = await fetchAllCanvasDataFromBackend();
-      setCanvasData(data);
 
-      // Extract user profile information from Canvas data
-      const userProfile = extractUserProfile(data);
-      setUserName(userProfile.userName);
-      setUserMajor(userProfile.userMajor);
-      setUserInitials(userProfile.userInitials);
+      if (!data || Object.keys(data).length === 0) {
+        console.error('Empty Canvas data received during refresh');
+        setError('Failed to refresh Canvas data. Please try again later.');
+      } else {
+        console.log('Canvas data refreshed successfully');
+        console.log('Refreshed Canvas data keys:', Object.keys(data));
+        setCanvasData(data);
+
+        // Extract user profile information from Canvas data
+        const userProfile = extractUserProfile(data);
+        setUserName(userProfile.userName);
+        setUserMajor(userProfile.userMajor);
+        setUserInitials(userProfile.userInitials);
+      }
     } catch (error) {
       console.error('Error refreshing Canvas data:', error);
       setError('An error occurred while refreshing Canvas data. Please try again later.');
