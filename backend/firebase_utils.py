@@ -18,6 +18,7 @@ def initialize_firebase():
     if firebase_admin._apps:
         # Firebase already initialized
         firebase_initialized = True
+        print("Firebase already initialized, using existing instance")
         return True
 
     # Check if service account key is provided as a path or directly as JSON
@@ -26,7 +27,15 @@ def initialize_firebase():
 
     if not service_account_key_path and not service_account_key_json:
         print("Warning: Firebase service account key not provided. Using fallback credentials.")
-        return False
+        # Try to initialize with application default credentials
+        try:
+            firebase_admin.initialize_app()
+            firebase_initialized = True
+            print("Firebase initialized with application default credentials")
+            return True
+        except Exception as e:
+            print(f"Error initializing Firebase with default credentials: {e}")
+            return False
 
     try:
         if service_account_key_path:
@@ -56,7 +65,16 @@ def get_user_canvas_credentials(user_id):
     if not firebase_initialized:
         success = initialize_firebase()
         if not success:
-            return None, None, "Firebase initialization failed"
+            print("Firebase initialization failed, using fallback credentials")
+            # Try to use fallback credentials from environment variables
+            canvas_url = os.getenv('CANVAS_URL')
+            canvas_api_key = os.getenv('CANVAS_API_KEY')
+
+            if canvas_url and canvas_api_key:
+                print("Using fallback Canvas credentials from environment variables")
+                return canvas_url, canvas_api_key, None
+            else:
+                return None, None, "Firebase initialization failed and no fallback credentials available"
 
     try:
         # Get Firestore client
@@ -66,7 +84,16 @@ def get_user_canvas_credentials(user_id):
         user_doc = db.collection('users').document(user_id).get()
 
         if not user_doc.exists:
-            return None, None, "User not found"
+            print(f"User document not found for user ID: {user_id}")
+            # Try to use fallback credentials from environment variables
+            canvas_url = os.getenv('CANVAS_URL')
+            canvas_api_key = os.getenv('CANVAS_API_KEY')
+
+            if canvas_url and canvas_api_key:
+                print("User not found, using fallback Canvas credentials from environment variables")
+                return canvas_url, canvas_api_key, None
+            else:
+                return None, None, "User not found and no fallback credentials available"
 
         # Get Canvas credentials
         user_data = user_doc.to_dict()
@@ -74,7 +101,16 @@ def get_user_canvas_credentials(user_id):
         canvas_api_key = user_data.get('canvasApiKey')
 
         if not canvas_url or not canvas_api_key:
-            return None, None, "Canvas credentials not found for user"
+            print(f"Canvas credentials not found for user ID: {user_id}")
+            # Try to use fallback credentials from environment variables
+            canvas_url = os.getenv('CANVAS_URL')
+            canvas_api_key = os.getenv('CANVAS_API_KEY')
+
+            if canvas_url and canvas_api_key:
+                print("Canvas credentials not found for user, using fallback credentials from environment variables")
+                return canvas_url, canvas_api_key, None
+            else:
+                return None, None, "Canvas credentials not found for user and no fallback credentials available"
 
         return canvas_url, canvas_api_key, None
     except Exception as e:
@@ -84,7 +120,7 @@ def get_user_canvas_credentials(user_id):
         canvas_api_key = os.getenv('CANVAS_API_KEY')
 
         if canvas_url and canvas_api_key:
-            print("Using fallback Canvas credentials from environment variables")
+            print("Using fallback Canvas credentials from environment variables due to error")
             return canvas_url, canvas_api_key, None
         else:
             return None, None, f"Error: {str(e)} and no fallback credentials available"

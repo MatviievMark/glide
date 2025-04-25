@@ -137,6 +137,12 @@ export async function POST(request: Request) {
     } else if (endpoint.startsWith('/api/v1/courses/') && endpoint.endsWith('/announcements')) {
       const courseId = endpoint.split('/')[4];
       pythonEndpoint = `/api/canvas/course-announcements/${courseId}`;
+    } else if (endpoint.startsWith('/api/v1/courses/') && endpoint.endsWith('/professors')) {
+      const courseId = endpoint.split('/')[4];
+      pythonEndpoint = `/api/canvas/class-professors/${courseId}`;
+    } else if (endpoint.startsWith('/api/v1/complete-class-data/')) {
+      const courseId = endpoint.split('/').pop();
+      pythonEndpoint = `/api/canvas/complete-class-data/${courseId}`;
     } else if (endpoint === '/api/v1/users/self') {
       pythonEndpoint = '/api/canvas/user-profile';
     } else if (endpoint === '/api/v1/users/self/todo') {

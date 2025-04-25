@@ -20,6 +20,7 @@ import {
   extractStatistics
 } from '@/utils/dashboardHelpers';
 import { saveCustomCourseName, getAllCustomCourseNames } from '@/utils/courseNameUtils';
+import { fetchCourseDetails } from '@/utils/canvas';
 
 // Empty arrays for when Canvas data is not yet loaded
 const emptyCourses: DashboardCourse[] = [];
@@ -81,8 +82,40 @@ const Dashboard: React.FC<DashboardProps> = ({
             const customCourseNames = await getAllCustomCourseNames();
             console.log('Custom course names:', customCourseNames);
 
+            // Fetch complete class data for each course
+            const updatedCanvasData = { ...canvasData };
+
+            // Create an array of promises for fetching course details
+            const fetchPromises = extractedCourses.map(async (course) => {
+              // Check if we already have complete data for this course
+              const completeDataKey = `complete_class_data_${course.id}`;
+
+              if (!updatedCanvasData[completeDataKey]) {
+                console.log(`Fetching complete data for course ${course.id}`);
+                try {
+                  const courseDetails = await fetchCourseDetails(course.id.toString());
+                  // Merge the course details into the canvas data
+                  Object.keys(courseDetails).forEach(key => {
+                    updatedCanvasData[key] = courseDetails[key];
+                  });
+                  console.log(`Successfully fetched complete data for course ${course.id}`);
+                } catch (error) {
+                  console.error(`Error fetching complete data for course ${course.id}:`, error);
+                }
+              } else {
+                console.log(`Already have complete data for course ${course.id}`);
+              }
+            });
+
+            // Wait for all fetch operations to complete
+            await Promise.all(fetchPromises);
+
+            // Re-extract courses with the updated data that includes professor information
+            const updatedExtractedCourses = await extractCourses(updatedCanvasData);
+            console.log('Updated extracted courses with professor data:', updatedExtractedCourses);
+
             // Apply custom names to courses if they exist
-            const coursesWithCustomNames = extractedCourses.map(course => {
+            const coursesWithCustomNames = updatedExtractedCourses.map(course => {
               if (customCourseNames[course.id]) {
                 console.log(`Applying custom name for course ${course.id}: ${customCourseNames[course.id]}`);
                 return { ...course, name: customCourseNames[course.id] };

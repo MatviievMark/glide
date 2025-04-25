@@ -1,616 +1,478 @@
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isAfter, isBefore, addDays } from 'date-fns';
 
-// Define common interfaces for Canvas data types
-interface TodoItem {
-  assignment: {
-    id: number;
-    name: string;
-    due_at: string | null;
-  };
-  context_name?: string;
+// Type definitions
+export interface CanvasDataResponse {
+  [key: string]: { data: unknown | null; error: string | null };
 }
 
-interface AnnouncementItem {
-  id: number;
-  title: string;
-  message: string;
-  posted_at: string;
-  context_code?: string;
-}
-
-// Used for upcoming events and calendar events
-export interface EventItem {
-  id: number;
-  title: string;
-  start_at: string;
-  html_url?: string;
-  context_name?: string;
-}
-
-interface EnrollmentWithGrades {
-  grades?: {
-    current_grade?: string;
-    current_score?: number;
-  };
-}
-
-// User profile types
-export interface CanvasUserProfile {
-  id: number;
-  name: string;
-  short_name?: string;
-  sortable_name?: string;
-  title?: string;
-  bio?: string;
-  primary_email?: string;
-  login_id?: string;
-  integration_id?: string;
-  time_zone?: string;
-  locale?: string;
-  effective_locale?: string;
-  avatar_url?: string;
-  calendar?: {
-    ics?: string;
-  };
-  lti_user_id?: string;
-  k5_user?: boolean;
-}
-
-// Define types for Canvas API data
-export interface CanvasResource<T> {
-  data: T | null;
-  error: string | null;
-}
-
-export type CanvasDataResponse = Record<string, CanvasResource<unknown>>;
-
-// Course types
-export interface CanvasCourse {
-  id: number;
-  name: string;
-  course_code: string;
-  enrollment_term_id: number;
-  workflow_state: string;
-  teachers?: Array<{
-    id: number;
-    display_name: string;
-  }>;
-}
-
-// Enrollment types
-export interface CanvasEnrollment {
-  id: number;
-  course_id: number;
-  grades?: {
-    current_grade?: string;
-    current_score?: number;
-    final_grade?: string;
-    final_score?: number;
-  };
-  type: string;
-}
-
-// Assignment types
-export interface CanvasAssignment {
-  id: number;
-  name: string;
-  description: string;
-  due_at: string | null;
-  points_possible: number;
-  course_id: number;
-}
-
-// Event types
-export interface CanvasEvent {
-  id: number;
-  title: string;
-  start_at: string;
-  end_at: string;
-  description: string;
-  context_type: string;
-  context_name: string;
-}
-
-// Announcement types
-export interface CanvasAnnouncement {
-  id: number;
-  title: string;
-  message: string;
-  posted_at: string;
-  context_code: string;
-}
-
-// Dashboard data types
 export interface DashboardCourse {
   id: number;
-  code: string;
   name: string;
+  code: string;
   instructor: string;
   progress: number;
 }
 
 export interface DashboardAssignment {
-  id: number;
+  id: number | string;
   title: string;
-  course: string;
   dueDate: string;
-  urgent: boolean;
+  formattedDueDate: string;
+  courseName: string;
+  courseId: number;
+  status: 'upcoming' | 'past' | 'missing';
+  score?: number;
+  pointsPossible?: number;
 }
 
 export interface DashboardAnnouncement {
-  id: number;
+  id: number | string;
   title: string;
-  date: string;
-  content: string;
+  message: string;
+  postedAt: string;
+  formattedPostedAt: string;
+  courseName: string;
+  courseId: number;
+  author?: string;
 }
 
-// Helper functions to extract and format data from Canvas API
-export async function extractCourses(canvasData: CanvasDataResponse | null): Promise<DashboardCourse[]> {
-  if (!canvasData) {
-    console.log('No Canvas data available');
-    return [];
-  }
-
-  console.log('Available keys in canvasData for courses:', Object.keys(canvasData));
-
-  // Check for courses data
-  if (!canvasData.courses?.data) {
-    console.log('No courses data found in Canvas data');
-    return [];
-  }
-
-  // Handle different data structures
-  let coursesData: CanvasCourse[] = [];
-
-  // Check if courses data is available
-  if (!canvasData.courses.data) {
-    console.log('No courses data available');
-    return [];
-  }
-
-  if (Array.isArray(canvasData.courses.data)) {
-    coursesData = canvasData.courses.data;
-    console.log(`Found ${coursesData.length} courses in array format`);
-  } else if (typeof canvasData.courses.data === 'object' && canvasData.courses.data !== null) {
-    // Handle case where data might be nested
-    console.log('Courses data is an object, checking for nested data');
-
-    // Try to find an array in the data
-    const nestedData = Object.values(canvasData.courses.data).find(val => Array.isArray(val));
-    if (nestedData) {
-      coursesData = nestedData as CanvasCourse[];
-      console.log(`Found ${coursesData.length} courses in nested format`);
-    } else {
-      // If no array is found, try to convert the object to an array
-      console.log('No nested array found, trying to convert object to array');
-      const courseEntries = Object.entries(canvasData.courses.data);
-
-      // Check if the entries look like courses
-      const possibleCourses = courseEntries
-        .filter(([_, value]) => typeof value === 'object' && value !== null && 'id' in value)
-        .map(([_, value]) => value as CanvasCourse);
-
-      if (possibleCourses.length > 0) {
-        coursesData = possibleCourses;
-        console.log(`Converted ${coursesData.length} courses from object format`);
-      }
-    }
-  }
-
-  if (coursesData.length === 0) {
-    console.log('No courses found after parsing');
-    return [];
-  }
-
-  // Get enrollments from both the enrollments endpoint and the grades endpoint
-  let regularEnrollments: CanvasEnrollment[] = [];
-  let gradesEnrollments: CanvasEnrollment[] = [];
-
-  // Process enrollments data
-  if (canvasData.enrollments?.data) {
-    if (Array.isArray(canvasData.enrollments.data)) {
-      regularEnrollments = canvasData.enrollments.data;
-      console.log(`Found ${regularEnrollments.length} enrollments in array format`);
-    } else if (typeof canvasData.enrollments.data === 'object' && canvasData.enrollments.data !== null) {
-      const nestedData = Object.values(canvasData.enrollments.data).find(val => Array.isArray(val));
-      if (nestedData) {
-        regularEnrollments = nestedData as CanvasEnrollment[];
-        console.log(`Found ${regularEnrollments.length} enrollments in nested format`);
-      }
-    }
-  }
-
-  // Process grades data
-  if (canvasData.grades?.data) {
-    if (Array.isArray(canvasData.grades.data)) {
-      gradesEnrollments = canvasData.grades.data;
-      console.log(`Found ${gradesEnrollments.length} grade enrollments in array format`);
-    } else if (typeof canvasData.grades.data === 'object' && canvasData.grades.data !== null) {
-      const nestedData = Object.values(canvasData.grades.data).find(val => Array.isArray(val));
-      if (nestedData) {
-        gradesEnrollments = nestedData as CanvasEnrollment[];
-        console.log(`Found ${gradesEnrollments.length} grade enrollments in nested format`);
-      }
-    }
-  }
-
-  // Combine both enrollment sources
-  const allEnrollments = [...regularEnrollments, ...gradesEnrollments];
-  console.log(`Combined ${allEnrollments.length} total enrollments`);
-
-  // Log a sample course for debugging
-  if (coursesData.length > 0) {
-    console.log('Sample course data:', JSON.stringify(coursesData[0], null, 2));
-  }
-
-  return coursesData.map(course => {
-    // Find the enrollment for this course to get the actual grade/progress
-    // First check in the grades data (which should be more accurate)
-    const enrollment = allEnrollments.find(e => e.course_id === course.id);
-
-    // Get the current score from the enrollment, or use a default value
-    let progress = 0;
-    if (enrollment?.grades?.current_score !== undefined) {
-      // Current score is typically on a 0-100 scale
-      progress = Math.round(enrollment.grades.current_score);
-    } else if (enrollment?.grades?.current_grade) {
-      // If we only have a letter grade, estimate a percentage
-      const gradeMap: Record<string, number> = {
-        'A+': 100, 'A': 95, 'A-': 90,
-        'B+': 87, 'B': 85, 'B-': 80,
-        'C+': 77, 'C': 75, 'C-': 70,
-        'D+': 67, 'D': 65, 'D-': 60,
-        'F': 50
-      };
-      progress = gradeMap[enrollment.grades.current_grade] || 0;
-    }
-
-    // Get instructor name if available
-    let instructor = '';
-    if (course.teachers && course.teachers.length > 0) {
-      instructor = course.teachers[0].display_name;
-    }
-
-    // Extract course name - handle different possible structures
-    let courseName = 'Unnamed Course';
-    if (typeof course.name === 'string' && course.name.trim() !== '') {
-      courseName = course.name;
-    } else if (course.course_code && typeof course.course_code === 'string') {
-      // Use course code as fallback
-      courseName = course.course_code;
-    }
-
-    // Extract course code - handle different possible structures
-    let courseCode = `Course ${course.id}`;
-    if (typeof course.course_code === 'string' && course.course_code.trim() !== '') {
-      courseCode = course.course_code;
-    }
-
-    // Skip logging for each course to reduce console noise
-
-    // Return the course with the original name from Canvas
-    // The custom name will be applied in the Dashboard component if it exists
-    return {
-      id: course.id,
-      code: courseCode,
-      name: courseName,
-      instructor,
-      progress
-    };
-  });
-}
-
-export function extractAssignments(canvasData: CanvasDataResponse | null): DashboardAssignment[] {
-  if (!canvasData) {
-    console.log('No Canvas data available for assignments');
-    return [];
-  }
-
-  console.log('Available keys in canvasData for assignments:', Object.keys(canvasData));
-
-  // Check for todo data
-  if (!canvasData.todo?.data) {
-    console.log('No todo data found in Canvas data');
-
-    // Try to find assignments in other places
-    if (canvasData.courses?.data) {
-      console.log('Looking for assignments in course data');
-      // This would require additional processing to extract assignments from courses
-      // For now, return empty array
-    }
-
-    return [];
-  }
-
-  // Handle different data structures
-  let todoItems: TodoItem[] = [];
-
-  if (Array.isArray(canvasData.todo.data)) {
-    todoItems = canvasData.todo.data;
-    console.log(`Found ${todoItems.length} todo items in array format`);
-  } else if (typeof canvasData.todo.data === 'object' && canvasData.todo.data !== null) {
-    // Handle case where data might be nested
-    console.log('Todo data is an object, checking for nested data');
-    const nestedData = Object.values(canvasData.todo.data).find(val => Array.isArray(val));
-    if (nestedData) {
-      todoItems = nestedData as TodoItem[];
-      console.log(`Found ${todoItems.length} todo items in nested format`);
-    }
-  }
-
-  if (todoItems.length === 0) {
-    console.log('No todo items found after parsing');
-    return [];
-  }
-
-  const now = new Date();
-
-  return todoItems
-    .filter(item => item.assignment)
-    .map(item => {
-      const dueDate = item.assignment.due_at ? parseISO(item.assignment.due_at) : null;
-      const formattedDate = dueDate ? format(dueDate, 'MMM d') : 'No due date';
-
-      // Calculate if assignment is urgent (due within 2 days)
-      const urgent = dueDate ?
-        Math.abs(dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24) <= 2 :
-        false;
-
-      return {
-        id: item.assignment.id,
-        title: item.assignment.name,
-        course: item.context_name || 'Unknown Course',
-        dueDate: formattedDate,
-        urgent
-      };
-    });
-}
-
-export function extractAnnouncements(canvasData: CanvasDataResponse | null): DashboardAnnouncement[] {
-  if (!canvasData) return [];
-
-  // Get announcements from the dedicated announcements endpoint
-  let announcements: AnnouncementItem[] = [];
-
-  // Log available keys for debugging
-  console.log('Available keys in canvasData:', Object.keys(canvasData));
-
-  // The key for the announcements endpoint will be 'announcements' or the full endpoint path
-  const announcementKey = Object.keys(canvasData).find(key =>
-    key === 'announcements' || key.includes('announcements')
-  );
-
-  if (announcementKey && canvasData[announcementKey]?.data) {
-    // We have announcements data from the dedicated endpoint
-    const announcementData = canvasData[announcementKey].data;
-
-    if (Array.isArray(announcementData)) {
-      announcements = announcementData;
-      console.log('Found announcements array:', announcements.length);
-    } else if (typeof announcementData === 'object' && announcementData !== null) {
-      // Handle case where data might be nested
-      console.log('Announcement data is an object, checking for nested data');
-      const nestedData = Object.values(announcementData).find(val => Array.isArray(val));
-      if (nestedData) {
-        announcements = nestedData as AnnouncementItem[];
-        console.log('Found nested announcements:', announcements.length);
-      }
-    }
-  } else if (canvasData?.upcoming_events?.data) {
-    // Fall back to upcoming events if no announcements found
-    console.log('No announcements found, using upcoming events as fallback');
-    const events = canvasData.upcoming_events.data as CanvasEvent[];
-    announcements = events
-      .filter(event => event.description && event.description.length > 0)
-      .map(event => ({
-        id: event.id,
-        title: event.title,
-        posted_at: event.start_at,
-        message: event.description,
-        context_code: event.context_name
-      }));
-  }
-
-  // If still no announcements, check if there's any data in the calendar_events
-  if (announcements.length === 0 && canvasData?.calendar_events?.data) {
-    console.log('Using calendar events as fallback for announcements');
-    const events = canvasData.calendar_events.data as CanvasEvent[];
-    announcements = events
-      .filter(event => event.description && event.description.length > 0)
-      .map(event => ({
-        id: event.id,
-        title: event.title,
-        posted_at: event.start_at,
-        message: event.description,
-        context_code: event.context_name
-      }));
-  }
-
-  // Sort announcements by date (newest first)
-  announcements.sort((a, b) => {
-    const dateA = a.posted_at ? new Date(a.posted_at).getTime() : 0;
-    const dateB = b.posted_at ? new Date(b.posted_at).getTime() : 0;
-    return dateB - dateA;
-  });
-
-  // Limit to most recent 5 announcements
-  announcements = announcements.slice(0, 5);
-
-  return announcements.map(announcement => {
-    const date = announcement.posted_at ?
-      format(parseISO(announcement.posted_at), 'MMM d') :
-      'Recent';
-
-    // Truncate content if it's too long
-    let content = announcement.message || '';
-    if (content.length > 100) {
-      content = content.substring(0, 97) + '...';
-    }
-
-    // Remove HTML tags if present
-    content = content.replace(/<[^>]*>/g, '');
-
-    return {
-      id: announcement.id,
-      title: announcement.title,
-      date,
-      content
-    };
-  });
-}
-
-// Extract statistics for dashboard
-export function extractUserProfile(canvasData: CanvasDataResponse | null): {
+export interface UserProfile {
   userName: string;
   userMajor: string;
   userInitials: string;
-} {
-  // Default values
-  let userName = 'Student';
-  let userMajor = 'Undeclared';
-  let userInitials = 'ST';
-
-  if (canvasData?.profile?.data) {
-    const profile = canvasData.profile.data as CanvasUserProfile;
-
-    // Extract name
-    if (profile.name) {
-      userName = profile.name;
-
-      // Generate initials from name
-      userInitials = profile.name
-        .split(' ')
-        .map(name => name[0])
-        .join('')
-        .toUpperCase()
-        .substring(0, 2);
-    }
-
-    // Extract major (title field often contains major/department)
-    if (profile.title) {
-      userMajor = profile.title;
-    }
-  }
-
-  return {
-    userName,
-    userMajor,
-    userInitials
-  };
 }
 
+/**
+ * Extract user profile information from Canvas data
+ * @param canvasData The Canvas data response
+ * @returns User profile information
+ */
+export function extractUserProfile(canvasData: CanvasDataResponse | null): UserProfile {
+  if (!canvasData || !canvasData.user_profile || !canvasData.user_profile.data) {
+    return {
+      userName: 'Student',
+      userMajor: 'Undeclared',
+      userInitials: 'ST'
+    };
+  }
+
+  try {
+    const profileData = canvasData.user_profile.data as any;
+    const name = profileData.name || 'Student';
+
+    // Extract initials from name
+    const nameParts = name.split(' ');
+    let initials = 'ST';
+
+    if (nameParts.length >= 2) {
+      initials = `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`;
+    } else if (nameParts.length === 1) {
+      initials = nameParts[0].substring(0, 2);
+    }
+
+    return {
+      userName: name,
+      userMajor: 'Student', // Canvas doesn't provide major info
+      userInitials: initials.toUpperCase()
+    };
+  } catch (error) {
+    console.error('Error extracting user profile:', error);
+    return {
+      userName: 'Student',
+      userMajor: 'Undeclared',
+      userInitials: 'ST'
+    };
+  }
+}
+
+/**
+ * Extract courses from Canvas data
+ * @param canvasData The Canvas data response
+ * @returns Array of dashboard courses
+ */
+export async function extractCourses(canvasData: CanvasDataResponse | null): Promise<DashboardCourse[]> {
+  if (!canvasData || !canvasData.all_classes || !canvasData.all_classes.data) {
+    return [];
+  }
+
+  try {
+    const coursesData = canvasData.all_classes.data as any[];
+
+    return coursesData.map(course => {
+      // Try to find professor information
+      let instructor = 'Instructor';
+
+      // First check direct professor data
+      const professorKey = `class_professors_${course.course_id}`;
+      if (canvasData[professorKey] && canvasData[professorKey].data) {
+        const professors = canvasData[professorKey].data as any[];
+        if (professors && professors.length > 0) {
+          instructor = professors[0].name;
+          console.log(`Found professor for course ${course.course_id}: ${instructor}`);
+        }
+      }
+
+      // Then check complete class data
+      const completeDataKey = `complete_class_data_${course.course_id}`;
+      if (instructor === 'Instructor' && canvasData[completeDataKey] && canvasData[completeDataKey].data) {
+        const completeData = canvasData[completeDataKey].data as any;
+        if (completeData && completeData.professors && completeData.professors.length > 0) {
+          instructor = completeData.professors[0].name;
+          console.log(`Found professor in complete data for course ${course.course_id}: ${instructor}`);
+        }
+      }
+
+      // If we still don't have a professor name, use the course name
+      if (instructor === 'Instructor') {
+        instructor = `Instructor of ${course.course_name}`;
+      }
+
+      // Get course progress from the data if available
+      let progress = 0;
+
+      // Try to get progress from grades if available
+      const gradesKey = `class_grades_${course.course_id}`;
+      if (canvasData[gradesKey] && canvasData[gradesKey].data) {
+        const grades = canvasData[gradesKey].data as any;
+        // If we have a current score, use it as progress percentage
+        if (grades && grades.current_score) {
+          progress = Math.min(100, Math.max(0, grades.current_score));
+        }
+      }
+
+      // Try to get progress from complete class data if available
+      // Reuse the completeDataKey variable that was declared earlier
+      if (canvasData[completeDataKey] && canvasData[completeDataKey].data) {
+        const completeData = canvasData[completeDataKey].data as any;
+        if (completeData && completeData.grades && completeData.grades.current_score) {
+          progress = Math.min(100, Math.max(0, completeData.grades.current_score));
+        }
+      }
+
+      return {
+        id: course.course_id,
+        name: course.course_name,
+        code: course.course_code || `Course ${course.course_id}`,
+        instructor,
+        progress
+      };
+    });
+  } catch (error) {
+    console.error('Error extracting courses:', error);
+    return [];
+  }
+}
+
+/**
+ * Extract assignments from Canvas data
+ * @param canvasData The Canvas data response
+ * @returns Array of dashboard assignments
+ */
+export function extractAssignments(canvasData: CanvasDataResponse | null): DashboardAssignment[] {
+  if (!canvasData) {
+    return [];
+  }
+
+  try {
+    const assignments: DashboardAssignment[] = [];
+
+    // Find all course IDs
+    const courseKeys = Object.keys(canvasData).filter(key =>
+      key.startsWith('complete_class_data_')
+    );
+
+    for (const courseKey of courseKeys) {
+      if (!canvasData[courseKey] || !canvasData[courseKey].data) continue;
+
+      const courseData = canvasData[courseKey].data as any;
+      const courseId = parseInt(courseKey.replace('complete_class_data_', ''), 10);
+      const courseName = courseData.course_info?.name || `Course ${courseId}`;
+
+      if (!courseData.assignments) continue;
+
+      // Process upcoming assignments
+      if (courseData.assignments.upcoming) {
+        courseData.assignments.upcoming.forEach((assignment: any) => {
+          if (!assignment.name || !assignment.due_date) return;
+
+          try {
+            const dueDate = parseISO(assignment.due_date);
+            assignments.push({
+              id: assignment.id,
+              title: assignment.name,
+              dueDate: assignment.due_date,
+              formattedDueDate: format(dueDate, 'MMM d, yyyy'),
+              courseName,
+              courseId,
+              status: 'upcoming',
+              pointsPossible: assignment.points_possible
+            });
+          } catch (e) {
+            console.error('Error parsing assignment date:', e);
+          }
+        });
+      }
+
+      // Process past assignments
+      if (courseData.assignments.past) {
+        courseData.assignments.past.forEach((assignment: any) => {
+          if (!assignment.name || !assignment.due_date) return;
+
+          try {
+            const dueDate = parseISO(assignment.due_date);
+            assignments.push({
+              id: assignment.id,
+              title: assignment.name,
+              dueDate: assignment.due_date,
+              formattedDueDate: format(dueDate, 'MMM d, yyyy'),
+              courseName,
+              courseId,
+              status: 'past',
+              score: assignment.score,
+              pointsPossible: assignment.points_possible
+            });
+          } catch (e) {
+            console.error('Error parsing assignment date:', e);
+          }
+        });
+      }
+
+      // Process missing assignments
+      if (courseData.assignments.missing) {
+        courseData.assignments.missing.forEach((assignment: any) => {
+          if (!assignment.name || !assignment.due_date) return;
+
+          try {
+            const dueDate = parseISO(assignment.due_date);
+            assignments.push({
+              id: assignment.id,
+              title: assignment.name,
+              dueDate: assignment.due_date,
+              formattedDueDate: format(dueDate, 'MMM d, yyyy'),
+              courseName,
+              courseId,
+              status: 'missing',
+              pointsPossible: assignment.points_possible
+            });
+          } catch (e) {
+            console.error('Error parsing assignment date:', e);
+          }
+        });
+      }
+    }
+
+    // Sort assignments by due date (upcoming first, then missing, then past)
+    return assignments.sort((a, b) => {
+      // First sort by status
+      if (a.status === 'upcoming' && b.status !== 'upcoming') return -1;
+      if (a.status === 'missing' && b.status === 'past') return -1;
+      if (a.status === 'past' && b.status !== 'past') return 1;
+
+      // Then sort by due date
+      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+    });
+  } catch (error) {
+    console.error('Error extracting assignments:', error);
+    return [];
+  }
+}
+
+/**
+ * Extract announcements from Canvas data
+ * @param canvasData The Canvas data response
+ * @returns Array of dashboard announcements
+ */
+export function extractAnnouncements(canvasData: CanvasDataResponse | null): DashboardAnnouncement[] {
+  if (!canvasData || !canvasData.announcements || !canvasData.announcements.data) {
+    return [];
+  }
+
+  try {
+    const announcementsData = canvasData.announcements.data as any[];
+
+    return announcementsData.map(announcement => {
+      let formattedPostedAt = 'Unknown date';
+
+      try {
+        if (announcement.posted_at) {
+          const postedDate = parseISO(announcement.posted_at);
+          formattedPostedAt = format(postedDate, 'MMM d, yyyy');
+        }
+      } catch (e) {
+        console.error('Error parsing announcement date:', e);
+      }
+
+      return {
+        id: announcement.id,
+        title: announcement.title,
+        message: announcement.message,
+        postedAt: announcement.posted_at,
+        formattedPostedAt,
+        courseName: announcement.course_name,
+        courseId: announcement.course_id,
+        author: announcement.author?.display_name
+      };
+    }).sort((a, b) => {
+      // Sort by posted date (newest first)
+      return new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime();
+    });
+  } catch (error) {
+    console.error('Error extracting announcements:', error);
+    return [];
+  }
+}
+
+/**
+ * Extract statistics from Canvas data
+ * @param canvasData The Canvas data response
+ * @returns Dashboard statistics
+ */
 export function extractStatistics(canvasData: CanvasDataResponse | null): {
   gpa: string;
   completedCredits: number;
   upcomingDeadlines: number;
   dueThisWeek: number;
 } {
-  // Calculate GPA from grades data if available
-  let gpa = '0.0';
-  let completedCredits = 0;
-
-  // Check if we have grades data from either the grades or enrollments endpoint
-  let enrollments: EnrollmentWithGrades[] = [];
-
-  // First check the grades endpoint
-  if (canvasData?.grades?.data) {
-    console.log('Grades data found:', canvasData.grades.data);
-
-    if (Array.isArray(canvasData.grades.data)) {
-      enrollments = canvasData.grades.data as EnrollmentWithGrades[];
-    } else if (typeof canvasData.grades.data === 'object' && canvasData.grades.data !== null) {
-      const nestedData = Object.values(canvasData.grades.data).find(val => Array.isArray(val));
-      if (nestedData) {
-        enrollments = nestedData as EnrollmentWithGrades[];
-      }
-    }
-  }
-
-  // Then check the enrollments endpoint if we didn't find grades
-  if (enrollments.length === 0 && canvasData?.enrollments?.data) {
-    console.log('Enrollments data found:', canvasData.enrollments.data);
-
-    if (Array.isArray(canvasData.enrollments.data)) {
-      enrollments = canvasData.enrollments.data as EnrollmentWithGrades[];
-    } else if (typeof canvasData.enrollments.data === 'object' && canvasData.enrollments.data !== null) {
-      const nestedData = Object.values(canvasData.enrollments.data).find(val => Array.isArray(val));
-      if (nestedData) {
-        enrollments = nestedData as EnrollmentWithGrades[];
-      }
-    }
-  }
-
-  console.log(`Found ${enrollments.length} enrollments with potential grade data`);
-
-  if (Array.isArray(enrollments) && enrollments.length > 0) {
-    // Map letter grades to GPA points
-    const gradeToPoints: Record<string, number> = {
-      'A+': 4.0, 'A': 4.0, 'A-': 3.7,
-      'B+': 3.3, 'B': 3.0, 'B-': 2.7,
-      'C+': 2.3, 'C': 2.0, 'C-': 1.7,
-      'D+': 1.3, 'D': 1.0, 'D-': 0.7,
-      'F': 0.0
+  if (!canvasData) {
+    return {
+      gpa: '0.00',
+      completedCredits: 0,
+      upcomingDeadlines: 0,
+      dueThisWeek: 0
     };
-
-    let totalPoints = 0;
-    let totalCourses = 0;
-
-    enrollments.forEach(enrollment => {
-      // Check if this enrollment has grade data
-      if (enrollment.grades) {
-        let gradeValue = 0;
-
-        // Try to get grade from letter grade
-        if (enrollment.grades.current_grade && gradeToPoints[enrollment.grades.current_grade] !== undefined) {
-          gradeValue = gradeToPoints[enrollment.grades.current_grade];
-        }
-        // If no letter grade, try to calculate from score
-        else if (enrollment.grades.current_score !== undefined) {
-          const score = enrollment.grades.current_score;
-          // Convert percentage score to GPA points (simple conversion)
-          if (score >= 90) gradeValue = 4.0;
-          else if (score >= 80) gradeValue = 3.0;
-          else if (score >= 70) gradeValue = 2.0;
-          else if (score >= 60) gradeValue = 1.0;
-          else gradeValue = 0.0;
-        }
-
-        if (gradeValue > 0) {
-          totalPoints += gradeValue;
-          totalCourses++;
-
-          // Estimate completed credits (assuming 3 credits per course)
-          // Only count courses that have a passing grade (D or better)
-          if (gradeValue >= 1.0) {
-            completedCredits += 3;
-          }
-        }
-      }
-    });
-
-    if (totalCourses > 0) {
-      const calculatedGpa = totalPoints / totalCourses;
-      gpa = calculatedGpa.toFixed(2);
-    }
-  } else {
-    console.log('No grades data found in canvasData');
-    // Fallback to default values if no grades data
-    gpa = '3.75';
-    completedCredits = 68;
   }
 
-  return {
-    gpa,
-    completedCredits,
-    upcomingDeadlines: canvasData?.todo?.data ? (canvasData.todo.data as TodoItem[]).length : 0,
-    dueThisWeek: canvasData?.todo?.data ?
-      (canvasData.todo.data as TodoItem[])
-        .filter(item => {
-          if (!item.assignment?.due_at) return false;
-          const dueDate = parseISO(item.assignment.due_at);
-          const now = new Date();
-          const diffDays = Math.abs(dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
-          return diffDays <= 7;
-        }).length : 0
-  };
+  try {
+    // Calculate GPA from course grades
+    let totalGradePoints = 0;
+    let totalCourses = 0;
+    let completedCredits = 0;
+
+    // Find all course IDs with complete data
+    const courseKeys = Object.keys(canvasData).filter(key =>
+      key.startsWith('complete_class_data_')
+    );
+
+    // Process each course to calculate GPA
+    for (const courseKey of courseKeys) {
+      if (!canvasData[courseKey] || !canvasData[courseKey].data) continue;
+
+      const courseData = canvasData[courseKey].data as any;
+
+      // Check if we have grades data
+      let gradePoints = 0;
+      let hasValidGrade = false;
+
+      // First try to use the letter grade if available
+      if (courseData.grades && courseData.grades.current_grade) {
+        const letterGrade = courseData.grades.current_grade;
+        console.log(`Found letter grade for course: ${letterGrade}`);
+
+        // Convert letter grade to grade points
+        switch(letterGrade) {
+          case 'A': gradePoints = 4.0; hasValidGrade = true; break;
+          case 'A-': gradePoints = 3.7; hasValidGrade = true; break;
+          case 'B+': gradePoints = 3.3; hasValidGrade = true; break;
+          case 'B': gradePoints = 3.0; hasValidGrade = true; break;
+          case 'B-': gradePoints = 2.7; hasValidGrade = true; break;
+          case 'C+': gradePoints = 2.3; hasValidGrade = true; break;
+          case 'C': gradePoints = 2.0; hasValidGrade = true; break;
+          case 'C-': gradePoints = 1.7; hasValidGrade = true; break;
+          case 'D+': gradePoints = 1.3; hasValidGrade = true; break;
+          case 'D': gradePoints = 1.0; hasValidGrade = true; break;
+          case 'D-': gradePoints = 0.7; hasValidGrade = true; break;
+          case 'F': gradePoints = 0.0; hasValidGrade = true; break;
+          default:
+            // If it's not a standard letter grade, try to parse it
+            if (letterGrade && letterGrade.startsWith('A')) gradePoints = 4.0;
+            else if (letterGrade && letterGrade.startsWith('B')) gradePoints = 3.0;
+            else if (letterGrade && letterGrade.startsWith('C')) gradePoints = 2.0;
+            else if (letterGrade && letterGrade.startsWith('D')) gradePoints = 1.0;
+            else if (letterGrade && letterGrade.startsWith('F')) gradePoints = 0.0;
+            else hasValidGrade = false;
+
+            if (!hasValidGrade) {
+              console.log(`Unrecognized letter grade: ${letterGrade}, will try using score instead`);
+            } else {
+              hasValidGrade = true;
+            }
+        }
+      }
+
+      // If we don't have a valid letter grade, fall back to using the score
+      if (!hasValidGrade && courseData.grades && courseData.grades.current_score) {
+        const score = courseData.grades.current_score;
+        console.log(`Using score for GPA calculation: ${score}`);
+
+        // Convert score to grade points (approximate)
+        if (score >= 93) gradePoints = 4.0;
+        else if (score >= 90) gradePoints = 3.7;
+        else if (score >= 87) gradePoints = 3.3;
+        else if (score >= 83) gradePoints = 3.0;
+        else if (score >= 80) gradePoints = 2.7;
+        else if (score >= 77) gradePoints = 2.3;
+        else if (score >= 73) gradePoints = 2.0;
+        else if (score >= 70) gradePoints = 1.7;
+        else if (score >= 67) gradePoints = 1.3;
+        else if (score >= 63) gradePoints = 1.0;
+        else if (score >= 60) gradePoints = 0.7;
+        else gradePoints = 0.0;
+
+        hasValidGrade = true;
+      }
+
+      // If we have a valid grade, add it to the total
+      if (hasValidGrade) {
+        totalGradePoints += gradePoints;
+        totalCourses++;
+
+        // Assume each course is worth 3 credits (this is just an approximation)
+        // Consider a course completed if the grade is D- or better (grade points >= 0.7)
+        if (gradePoints >= 0.7) {
+          completedCredits += 3;
+        }
+      }
+    }
+
+    // Calculate GPA
+    const calculatedGpa = totalCourses > 0 ? totalGradePoints / totalCourses : 0;
+    const gpa = calculatedGpa.toFixed(2);
+
+    console.log(`GPA calculation: ${totalGradePoints} total grade points / ${totalCourses} courses = ${calculatedGpa} (${gpa})`);
+    console.log(`Completed credits: ${completedCredits}`);
+
+    // If we don't have any courses with grades, use default values
+    if (totalCourses === 0) {
+      completedCredits = 0;
+      console.log('No courses with grades found, using default values');
+    }
+
+    // Calculate upcoming deadlines
+    const assignments = extractAssignments(canvasData);
+    const upcomingAssignments = assignments.filter(a => a.status === 'upcoming');
+    const upcomingDeadlines = upcomingAssignments.length;
+
+    // Calculate assignments due this week
+    const now = new Date();
+    const nextWeek = addDays(now, 7);
+    const dueThisWeek = upcomingAssignments.filter(a => {
+      const dueDate = parseISO(a.dueDate);
+      return isAfter(dueDate, now) && isBefore(dueDate, nextWeek);
+    }).length;
+
+    return {
+      gpa,
+      completedCredits,
+      upcomingDeadlines,
+      dueThisWeek
+    };
+  } catch (error) {
+    console.error('Error extracting statistics:', error);
+    return {
+      gpa: '0.00',
+      completedCredits: 0,
+      upcomingDeadlines: 0,
+      dueThisWeek: 0
+    };
+  }
 }
