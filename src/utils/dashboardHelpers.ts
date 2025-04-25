@@ -23,6 +23,7 @@ export interface DashboardAssignment {
   status: 'upcoming' | 'past' | 'missing';
   score?: number;
   pointsPossible?: number;
+  urgent?: boolean;
 }
 
 export interface DashboardAnnouncement {
@@ -47,6 +48,11 @@ export interface UserProfile {
  * @param canvasData The Canvas data response
  * @returns User profile information
  */
+interface ProfileData {
+  name?: string;
+  [key: string]: unknown;
+}
+
 export function extractUserProfile(canvasData: CanvasDataResponse | null): UserProfile {
   if (!canvasData || !canvasData.user_profile || !canvasData.user_profile.data) {
     return {
@@ -57,7 +63,7 @@ export function extractUserProfile(canvasData: CanvasDataResponse | null): UserP
   }
 
   try {
-    const profileData = canvasData.user_profile.data as any;
+    const profileData = canvasData.user_profile.data as ProfileData;
     const name = profileData.name || 'Student';
 
     // Extract initials from name
@@ -95,8 +101,21 @@ export async function extractCourses(canvasData: CanvasDataResponse | null): Pro
     return [];
   }
 
+  interface CourseItem {
+    course_id: number;
+    course_name: string;
+    course_code?: string;
+    [key: string]: unknown;
+  }
+
+  interface Professor {
+    id?: number;
+    name: string;
+    [key: string]: unknown;
+  }
+
   try {
-    const coursesData = canvasData.all_classes.data as any[];
+    const coursesData = canvasData.all_classes.data as CourseItem[];
 
     return coursesData.map(course => {
       // Try to find professor information
@@ -105,7 +124,7 @@ export async function extractCourses(canvasData: CanvasDataResponse | null): Pro
       // First check direct professor data
       const professorKey = `class_professors_${course.course_id}`;
       if (canvasData[professorKey] && canvasData[professorKey].data) {
-        const professors = canvasData[professorKey].data as any[];
+        const professors = canvasData[professorKey].data as Professor[];
         if (professors && professors.length > 0) {
           instructor = professors[0].name;
           console.log(`Found professor for course ${course.course_id}: ${instructor}`);
@@ -115,7 +134,11 @@ export async function extractCourses(canvasData: CanvasDataResponse | null): Pro
       // Then check complete class data
       const completeDataKey = `complete_class_data_${course.course_id}`;
       if (instructor === 'Instructor' && canvasData[completeDataKey] && canvasData[completeDataKey].data) {
-        const completeData = canvasData[completeDataKey].data as any;
+        interface CompleteClassData {
+          professors?: Professor[];
+          [key: string]: unknown;
+        }
+        const completeData = canvasData[completeDataKey].data as CompleteClassData;
         if (completeData && completeData.professors && completeData.professors.length > 0) {
           instructor = completeData.professors[0].name;
           console.log(`Found professor in complete data for course ${course.course_id}: ${instructor}`);
@@ -133,7 +156,11 @@ export async function extractCourses(canvasData: CanvasDataResponse | null): Pro
       // Try to get progress from grades if available
       const gradesKey = `class_grades_${course.course_id}`;
       if (canvasData[gradesKey] && canvasData[gradesKey].data) {
-        const grades = canvasData[gradesKey].data as any;
+        interface GradesData {
+          current_score?: number;
+          [key: string]: unknown;
+        }
+        const grades = canvasData[gradesKey].data as GradesData;
         // If we have a current score, use it as progress percentage
         if (grades && grades.current_score) {
           progress = Math.min(100, Math.max(0, grades.current_score));
@@ -143,7 +170,13 @@ export async function extractCourses(canvasData: CanvasDataResponse | null): Pro
       // Try to get progress from complete class data if available
       // Reuse the completeDataKey variable that was declared earlier
       if (canvasData[completeDataKey] && canvasData[completeDataKey].data) {
-        const completeData = canvasData[completeDataKey].data as any;
+        interface CompleteDataWithGrades {
+          grades?: {
+            current_score?: number;
+          };
+          [key: string]: unknown;
+        }
+        const completeData = canvasData[completeDataKey].data as CompleteDataWithGrades;
         if (completeData && completeData.grades && completeData.grades.current_score) {
           progress = Math.min(100, Math.max(0, completeData.grades.current_score));
         }
@@ -184,7 +217,28 @@ export function extractAssignments(canvasData: CanvasDataResponse | null): Dashb
     for (const courseKey of courseKeys) {
       if (!canvasData[courseKey] || !canvasData[courseKey].data) continue;
 
-      const courseData = canvasData[courseKey].data as any;
+      interface CourseDataWithAssignments {
+        course_info?: {
+          name?: string;
+        };
+        assignments?: {
+          upcoming?: CourseAssignment[];
+          past?: CourseAssignment[];
+          missing?: CourseAssignment[];
+        };
+        [key: string]: unknown;
+      }
+
+      interface CourseAssignment {
+        id: number | string;
+        name: string;
+        due_date: string;
+        points_possible?: number;
+        score?: number;
+        [key: string]: unknown;
+      }
+
+      const courseData = canvasData[courseKey].data as CourseDataWithAssignments;
       const courseId = parseInt(courseKey.replace('complete_class_data_', ''), 10);
       const courseName = courseData.course_info?.name || `Course ${courseId}`;
 
@@ -192,7 +246,7 @@ export function extractAssignments(canvasData: CanvasDataResponse | null): Dashb
 
       // Process upcoming assignments
       if (courseData.assignments.upcoming) {
-        courseData.assignments.upcoming.forEach((assignment: any) => {
+        courseData.assignments.upcoming.forEach((assignment: CourseAssignment) => {
           if (!assignment.name || !assignment.due_date) return;
 
           try {
@@ -215,7 +269,7 @@ export function extractAssignments(canvasData: CanvasDataResponse | null): Dashb
 
       // Process past assignments
       if (courseData.assignments.past) {
-        courseData.assignments.past.forEach((assignment: any) => {
+        courseData.assignments.past.forEach((assignment: CourseAssignment) => {
           if (!assignment.name || !assignment.due_date) return;
 
           try {
@@ -239,7 +293,7 @@ export function extractAssignments(canvasData: CanvasDataResponse | null): Dashb
 
       // Process missing assignments
       if (courseData.assignments.missing) {
-        courseData.assignments.missing.forEach((assignment: any) => {
+        courseData.assignments.missing.forEach((assignment: CourseAssignment) => {
           if (!assignment.name || !assignment.due_date) return;
 
           try {
@@ -288,7 +342,21 @@ export function extractAnnouncements(canvasData: CanvasDataResponse | null): Das
   }
 
   try {
-    const announcementsData = canvasData.announcements.data as any[];
+    interface Announcement {
+      id: number | string;
+      title: string;
+      message: string;
+      posted_at: string;
+      course_name: string;
+      course_id: number;
+      author?: {
+        display_name?: string;
+        [key: string]: unknown;
+      };
+      [key: string]: unknown;
+    }
+
+    const announcementsData = canvasData.announcements.data as Announcement[];
 
     return announcementsData.map(announcement => {
       let formattedPostedAt = 'Unknown date';
@@ -357,7 +425,15 @@ export function extractStatistics(canvasData: CanvasDataResponse | null): {
     for (const courseKey of courseKeys) {
       if (!canvasData[courseKey] || !canvasData[courseKey].data) continue;
 
-      const courseData = canvasData[courseKey].data as any;
+      interface CourseDataWithGrades {
+        grades?: {
+          current_grade?: string;
+          current_score?: number;
+        };
+        [key: string]: unknown;
+      }
+
+      const courseData = canvasData[courseKey].data as CourseDataWithGrades;
 
       // Check if we have grades data
       let gradePoints = 0;

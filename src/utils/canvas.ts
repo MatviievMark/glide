@@ -5,6 +5,33 @@ export interface CanvasDataResponse {
   [key: string]: { data: unknown | null; error: string | null };
 }
 
+// Course data interface
+export interface CourseData {
+  course_id: number;
+  course_name: string;
+  course_code?: string;
+  professors?: { id: number; name: string }[];
+  grades?: {
+    current_score?: number;
+    current_grade?: string;
+  };
+  assignments?: {
+    upcoming?: CourseAssignment[];
+    past?: CourseAssignment[];
+    missing?: CourseAssignment[];
+  };
+  [key: string]: unknown;
+}
+
+export interface CourseAssignment {
+  id: number;
+  name: string;
+  due_date: string;
+  points_possible?: number;
+  score?: number;
+  [key: string]: unknown;
+}
+
 // Cache keys
 const CANVAS_CACHE_KEY = 'canvas_data_cache';
 const CANVAS_CACHE_TIMESTAMP_KEY = 'canvas_data_cache_timestamp';
@@ -70,15 +97,15 @@ function getCachedCourseIds(): number[] | null {
  * @param courseId The Canvas course ID
  * @returns Promise that resolves to the course data
  */
-export async function fetchCourseData(courseId: string): Promise<any> {
+export async function fetchCourseData(courseId: string): Promise<CourseData | null> {
   try {
     // Check if we have cached data for this course
     const cachedData = getCachedCanvasData();
     const cacheKey = `course_data_${courseId}`;
 
-    if (cachedData && cachedData[cacheKey] && !isCacheExpired()) {
+    if (cachedData && cachedData[cacheKey] && cachedData[cacheKey].data && !isCacheExpired()) {
       console.log(`Using cached data for course ${courseId}`);
-      return cachedData[cacheKey];
+      return cachedData[cacheKey].data as CourseData;
     }
 
     console.log(`Fetching data for course ${courseId} from backend`);
@@ -109,9 +136,9 @@ export async function fetchCourseData(courseId: string): Promise<any> {
     const cachedData = getCachedCanvasData();
     const cacheKey = `course_data_${courseId}`;
 
-    if (cachedData && cachedData[cacheKey]) {
+    if (cachedData && cachedData[cacheKey] && cachedData[cacheKey].data) {
       console.log(`Using cached data for course ${courseId} after fetch error`);
-      return cachedData[cacheKey];
+      return cachedData[cacheKey].data as CourseData;
     }
 
     return null;
@@ -201,7 +228,7 @@ export async function fetchAllCanvasDataFromBackend(): Promise<CanvasDataRespons
             error: null
           },
           [`class_professors_${courseId}`]: {
-            data: courseData.professors,
+            data: courseData?.professors || [],
             error: null
           }
         }))

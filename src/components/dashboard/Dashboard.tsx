@@ -319,7 +319,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                         key={assignment.id}
                         id={assignment.id}
                         title={assignment.title}
-                        course={assignment.course}
+                        course={assignment.courseName}
                         dueDate={assignment.dueDate}
                         urgent={assignment.urgent}
                         onClick={() => handleAssignmentClick(assignment.id)}
@@ -346,8 +346,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                         key={announcement.id}
                         id={announcement.id}
                         title={announcement.title}
-                        date={announcement.date}
-                        content={announcement.content}
+                        date={announcement.formattedPostedAt}
+                        content={announcement.message}
+                        course={announcement.courseName}
                         onClick={() => handleAnnouncementClick(announcement.id)}
                       />
                     ))}

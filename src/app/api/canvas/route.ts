@@ -119,8 +119,8 @@ export async function POST(request: Request) {
 
     // Map the Canvas API endpoint to our Python backend endpoint
     let pythonEndpoint = '';
-    let method = 'GET';
-    let queryParams = `?user_id=${decodedToken.uid}`;
+    const method = 'GET';
+    const queryParams = `?user_id=${decodedToken.uid}`;
 
     // Parse the endpoint to determine which Python backend endpoint to call
     if (endpoint === '/api/v1/courses') {

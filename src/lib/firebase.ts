@@ -1,6 +1,6 @@
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
+import { getAuth, Auth } from 'firebase/auth';
+import { getFirestore, Firestore } from 'firebase/firestore';
 
 // Check if we have all required Firebase config values
 const hasRequiredConfig =
@@ -9,9 +9,9 @@ const hasRequiredConfig =
   process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
 
 // Only initialize Firebase if we have the required config
-let app;
-let auth;
-let db;
+let app: FirebaseApp | undefined;
+let auth: Auth;
+let db: Firestore;
 
 if (hasRequiredConfig) {
   try {
@@ -39,9 +39,18 @@ if (hasRequiredConfig) {
     db = getFirestore(app);
   } catch (error) {
     console.error('Error initializing Firebase:', error);
+
+    // Create dummy implementations to prevent runtime errors
+    auth = {} as Auth;
+    db = {} as Firestore;
   }
 } else {
   console.warn('Firebase configuration is incomplete. Authentication and database features will not work.');
+
+  // Create dummy implementations to prevent runtime errors
+  // These will be non-functional but will satisfy TypeScript
+  auth = {} as Auth;
+  db = {} as Firestore;
 }
 
 export { app, auth, db };
