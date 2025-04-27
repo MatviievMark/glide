@@ -3,6 +3,35 @@ from dotenv import load_dotenv
 from canvasapi import Canvas
 from datetime import datetime, timedelta
 from firebase_utils import get_user_canvas_credentials
+import functools
+import time
+
+# Cache decorator with TTL (time-to-live)
+def cache_with_ttl(ttl_seconds=300):  # Default 5 minutes cache
+    """
+    Function decorator that caches the result with a time-to-live (TTL).
+    """
+    def decorator(func):
+        cache = {}
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            # Create a key based on function arguments
+            key = str(args) + str(kwargs)
+
+            # Check if result is in cache and not expired
+            if key in cache:
+                result, timestamp = cache[key]
+                if time.time() - timestamp < ttl_seconds:
+                    return result
+
+            # Call the function and cache the result
+            result = func(*args, **kwargs)
+            cache[key] = (result, time.time())
+            return result
+
+        return wrapper
+    return decorator
 
 class CanvasManager:
     def __init__(self, user_id=None, canvas_url=None, api_key=None):
@@ -30,6 +59,7 @@ class CanvasManager:
         self.canvas = Canvas(self.canvas_url, self.api_key)
         self.user = self.canvas.get_current_user()
 
+    @cache_with_ttl(ttl_seconds=600)  # Cache for 10 minutes
     def get_current_classes(self):
         """Fetch all current classes for the user"""
         try:
@@ -161,6 +191,7 @@ class CanvasManager:
             print(f"Error fetching upcoming tests: {str(e)}")
             return None
 
+    @cache_with_ttl(ttl_seconds=1800)  # Cache for 30 minutes
     def get_all_classes(self):
         """Fetch all classes for the user regardless of term"""
         try:
@@ -244,6 +275,7 @@ class CanvasManager:
             print(f"Error fetching modules: {str(e)}")
             return None
 
+    @cache_with_ttl(ttl_seconds=900)  # Cache for 15 minutes
     def get_course_announcements(self, course_id):
         """Fetch recent announcements for a course"""
         try:
@@ -344,6 +376,7 @@ class CanvasManager:
             print(f"Error fetching assignment feedback: {str(e)}")
             return None
 
+    @cache_with_ttl(ttl_seconds=3600)  # Cache for 1 hour
     def get_class_professors(self, course_id):
         """Fetch professors for a specific class"""
         try:
@@ -535,6 +568,7 @@ class CanvasManager:
                 }
             }
 
+    @cache_with_ttl(ttl_seconds=900)  # Cache for 15 minutes
     def get_complete_class_data(self, course_id):
         """
         Fetch all available information for a specific class.

@@ -3,6 +3,8 @@ from flask_cors import CORS
 from canvas_manager import CanvasManager
 import os
 from dotenv import load_dotenv
+import concurrent.futures
+import threading
 
 # Load environment variables
 load_dotenv()
@@ -75,6 +77,13 @@ def get_course_data(course_id):
     """Get complete data for a specific course"""
     user_id = request.args.get('user_id')
 
+    # Optional parameters for selective loading
+    load_modules = request.args.get('load_modules', 'true').lower() == 'true'
+    load_files = request.args.get('load_files', 'true').lower() == 'true'
+    load_discussions = request.args.get('load_discussions', 'true').lower() == 'true'
+    load_groups = request.args.get('load_groups', 'true').lower() == 'true'
+    load_analytics = request.args.get('load_analytics', 'true').lower() == 'true'
+
     if not user_id:
         return jsonify({"error": "User ID is required"}), 400
 
@@ -82,7 +91,7 @@ def get_course_data(course_id):
         # Initialize Canvas manager with user credentials from Firebase
         canvas_manager = CanvasManager(user_id=user_id)
 
-        # Get complete class data
+        # Get complete class data - this is now cached
         course_data = canvas_manager.get_complete_class_data(course_id)
 
         if not course_data:
@@ -118,6 +127,22 @@ def get_course_data(course_id):
 
                 if professors:
                     course_data['professors'] = professors
+
+        # Remove data that wasn't requested to reduce payload size
+        if not load_modules and 'modules' in course_data:
+            del course_data['modules']
+
+        if not load_files and 'files' in course_data:
+            del course_data['files']
+
+        if not load_discussions and 'discussions' in course_data:
+            del course_data['discussions']
+
+        if not load_groups and 'groups' in course_data:
+            del course_data['groups']
+
+        if not load_analytics and 'analytics' in course_data:
+            del course_data['analytics']
 
         return jsonify({
             "status": "success",
@@ -255,6 +280,10 @@ def get_all_data():
     user_id = request.args.get('user_id')
     load_all = request.args.get('load_all', 'false').lower() == 'true'
 
+    # Get optional parameters for selective loading
+    load_announcements = request.args.get('load_announcements', 'true').lower() == 'true'
+    load_professors = request.args.get('load_professors', 'true').lower() == 'true'
+
     if not user_id:
         return jsonify({"error": "User ID is required"}), 400
 
@@ -268,7 +297,7 @@ def get_all_data():
         if not courses:
             return jsonify({"error": "No courses found"}), 404
 
-        # Prepare response data
+        # Prepare response data with basic information
         response_data = {
             "all_classes": {
                 "data": courses,
@@ -285,99 +314,128 @@ def get_all_data():
             }
         }
 
-        # Get announcements for all courses and track professor information
-        all_announcements = []
-        professor_info = {}  # Dictionary to store professor info by course_id
+        # Thread-local storage for canvas_manager instances
+        thread_local = threading.local()
 
-        for course in courses:
+        def get_canvas_manager():
+            """Get or create a thread-local canvas_manager instance"""
+            if not hasattr(thread_local, 'canvas_manager'):
+                thread_local.canvas_manager = CanvasManager(user_id=user_id)
+            return thread_local.canvas_manager
+
+        # Function to process a single course
+        def process_course(course):
             course_id = course['course_id']
             course_name = course['course_name']
+            result = {}
+            professor_info = []
+            announcements = []
 
-            # Get announcements
-            try:
-                announcements = canvas_manager.get_course_announcements(course_id)
-                if announcements:
-                    for announcement in announcements:
-                        announcement['course_name'] = course_name
-                        announcement['course_id'] = course_id
-                        all_announcements.append(announcement)
+            cm = get_canvas_manager()
 
-                        # Extract professor info from announcements if available
-                        if 'author' in announcement and announcement['author'] and 'display_name' in announcement['author']:
-                            if course_id not in professor_info:
-                                professor_info[course_id] = []
+            # Get announcements if requested
+            if load_announcements:
+                try:
+                    course_announcements = cm.get_course_announcements(course_id)
+                    if course_announcements:
+                        for announcement in course_announcements:
+                            announcement['course_name'] = course_name
+                            announcement['course_id'] = course_id
+                            announcements.append(announcement)
 
-                            # Check if this professor is already in our list
-                            prof_name = announcement['author']['display_name']
-                            prof_id = announcement['author'].get('id', 0)
-                            prof_exists = False
+                            # Extract professor info from announcements if available
+                            if 'author' in announcement and announcement['author'] and 'display_name' in announcement['author']:
+                                prof_name = announcement['author']['display_name']
+                                prof_id = announcement['author'].get('id', 0)
 
-                            for prof in professor_info[course_id]:
-                                if prof['name'] == prof_name:
-                                    prof_exists = True
-                                    break
+                                # Check if this professor is already in our list
+                                prof_exists = False
+                                for prof in professor_info:
+                                    if prof['name'] == prof_name:
+                                        prof_exists = True
+                                        break
 
-                            if not prof_exists:
-                                professor_info[course_id].append({
-                                    'id': prof_id,
-                                    'name': prof_name,
-                                    'role': 'Teacher',
-                                    'email': None,
-                                    'avatar_url': announcement['author'].get('avatar_image_url')
-                                })
-            except Exception as e:
-                print(f"Error getting announcements for course {course_id}: {str(e)}")
+                                if not prof_exists:
+                                    professor_info.append({
+                                        'id': prof_id,
+                                        'name': prof_name,
+                                        'role': 'Teacher',
+                                        'email': None,
+                                        'avatar_url': announcement['author'].get('avatar_image_url')
+                                    })
+                except Exception as e:
+                    print(f"Error getting announcements for course {course_id}: {str(e)}")
 
-            # Get professors for each course
-            try:
-                professors = canvas_manager.get_class_professors(course_id)
-                if professors and professors[0]['name'] != 'Course Instructor':
-                    # Add professors data to response
-                    response_data[f"class_professors_{course_id}"] = {
-                        "data": professors,
-                        "error": None
-                    }
-                elif course_id in professor_info and professor_info[course_id]:
-                    # Use professor info extracted from announcements
-                    response_data[f"class_professors_{course_id}"] = {
-                        "data": professor_info[course_id],
-                        "error": None
-                    }
-                else:
-                    # Add placeholder professor data
-                    response_data[f"class_professors_{course_id}"] = {
-                        "data": [{
-                            "id": 0,
-                            "name": "Course Instructor",
-                            "role": "Teacher",
-                            "email": None
-                        }],
-                        "error": None
-                    }
-            except Exception as e:
-                print(f"Error getting professors for course {course_id}: {str(e)}")
-                # Check if we have professor info from announcements
-                if course_id in professor_info and professor_info[course_id]:
-                    response_data[f"class_professors_{course_id}"] = {
-                        "data": professor_info[course_id],
-                        "error": None
-                    }
-                else:
-                    # Add placeholder professor data
-                    response_data[f"class_professors_{course_id}"] = {
-                        "data": [{
-                            "id": 0,
-                            "name": "Course Instructor",
-                            "role": "Teacher",
-                            "email": None
-                        }],
-                        "error": None
-                    }
+            # Get professors if requested
+            if load_professors:
+                try:
+                    professors = cm.get_class_professors(course_id)
+                    if professors and professors[0]['name'] != 'Course Instructor':
+                        # Add professors data to result
+                        result[f"class_professors_{course_id}"] = {
+                            "data": professors,
+                            "error": None
+                        }
+                    elif professor_info:
+                        # Use professor info extracted from announcements
+                        result[f"class_professors_{course_id}"] = {
+                            "data": professor_info,
+                            "error": None
+                        }
+                    else:
+                        # Add placeholder professor data
+                        result[f"class_professors_{course_id}"] = {
+                            "data": [{
+                                "id": 0,
+                                "name": "Course Instructor",
+                                "role": "Teacher",
+                                "email": None
+                            }],
+                            "error": None
+                        }
+                except Exception as e:
+                    print(f"Error getting professors for course {course_id}: {str(e)}")
+                    if professor_info:
+                        result[f"class_professors_{course_id}"] = {
+                            "data": professor_info,
+                            "error": None
+                        }
+                    else:
+                        # Add placeholder professor data
+                        result[f"class_professors_{course_id}"] = {
+                            "data": [{
+                                "id": 0,
+                                "name": "Course Instructor",
+                                "role": "Teacher",
+                                "email": None
+                            }],
+                            "error": None
+                        }
 
-        response_data["announcements"] = {
-            "data": all_announcements,
-            "error": None
-        }
+            return {
+                "result": result,
+                "announcements": announcements
+            }
+
+        # Process courses in parallel
+        all_announcements = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(10, len(courses))) as executor:
+            future_to_course = {executor.submit(process_course, course): course for course in courses}
+
+            for future in concurrent.futures.as_completed(future_to_course):
+                try:
+                    data = future.result()
+                    # Merge results into response_data
+                    response_data.update(data["result"])
+                    all_announcements.extend(data["announcements"])
+                except Exception as e:
+                    print(f"Error processing course: {str(e)}")
+
+        if load_announcements:
+            response_data["announcements"] = {
+                "data": all_announcements,
+                "error": None
+            }
 
         return jsonify(response_data)
     except Exception as e:
