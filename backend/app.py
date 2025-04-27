@@ -42,8 +42,9 @@ def initialize_canvas():
 
 @app.route('/api/canvas/all-courses-id', methods=['GET'])
 def get_all_courses_id():
-    """Get all course IDs for a student"""
+    """Get course IDs for a student (current semester by default)"""
     user_id = request.args.get('user_id')
+    load_all = request.args.get('load_all', 'false').lower() == 'true'
 
     if not user_id:
         return jsonify({"error": "User ID is required"}), 400
@@ -52,8 +53,8 @@ def get_all_courses_id():
         # Initialize Canvas manager with user credentials from Firebase
         canvas_manager = CanvasManager(user_id=user_id)
 
-        # Get all courses
-        courses = canvas_manager.get_all_classes()
+        # Get courses (current semester by default, or all if specified)
+        courses = canvas_manager.get_all_classes() if load_all else canvas_manager.get_current_classes()
 
         if not courses:
             return jsonify({"error": "No courses found"}), 404
@@ -87,6 +88,37 @@ def get_course_data(course_id):
         if not course_data:
             return jsonify({"error": f"No data found for course {course_id}"}), 404
 
+        # Check if we need to extract professor info from announcements
+        if (not course_data.get('professors') or
+            (len(course_data['professors']) == 1 and course_data['professors'][0]['name'] == 'Course Instructor')):
+
+            # Try to extract professor info from announcements
+            if course_data.get('announcements'):
+                professors = []
+                for announcement in course_data['announcements']:
+                    if 'author' in announcement and announcement['author'] and 'display_name' in announcement['author']:
+                        prof_name = announcement['author']['display_name']
+                        prof_id = announcement['author'].get('id', 0)
+
+                        # Check if this professor is already in our list
+                        prof_exists = False
+                        for prof in professors:
+                            if prof['name'] == prof_name:
+                                prof_exists = True
+                                break
+
+                        if not prof_exists:
+                            professors.append({
+                                'id': prof_id,
+                                'name': prof_name,
+                                'role': 'Teacher',
+                                'email': None,
+                                'avatar_url': announcement['author'].get('avatar_image_url')
+                            })
+
+                if professors:
+                    course_data['professors'] = professors
+
         return jsonify({
             "status": "success",
             "course_data": course_data
@@ -96,8 +128,9 @@ def get_course_data(course_id):
 
 @app.route('/api/canvas/all-classes', methods=['GET'])
 def get_all_classes():
-    """Get all classes for a user"""
+    """Get classes for a user (current semester by default)"""
     user_id = request.args.get('user_id')
+    load_all = request.args.get('load_all', 'false').lower() == 'true'
 
     if not user_id:
         return jsonify({"error": "User ID is required"}), 400
@@ -106,8 +139,8 @@ def get_all_classes():
         # Initialize Canvas manager with user credentials from Firebase
         canvas_manager = CanvasManager(user_id=user_id)
 
-        # Get all classes
-        classes = canvas_manager.get_all_classes()
+        # Get classes (current semester by default, or all if specified)
+        classes = canvas_manager.get_all_classes() if load_all else canvas_manager.get_current_classes()
 
         if not classes:
             return jsonify({"error": "No classes found"}), 404
@@ -176,8 +209,9 @@ def get_user_profile():
 
 @app.route('/api/canvas/announcements', methods=['GET'])
 def get_announcements():
-    """Get announcements from all courses"""
+    """Get announcements from courses (current semester by default)"""
     user_id = request.args.get('user_id')
+    load_all = request.args.get('load_all', 'false').lower() == 'true'
 
     if not user_id:
         return jsonify({"error": "User ID is required"}), 400
@@ -186,8 +220,8 @@ def get_announcements():
         # Initialize Canvas manager with user credentials from Firebase
         canvas_manager = CanvasManager(user_id=user_id)
 
-        # Get all courses
-        courses = canvas_manager.get_all_classes()
+        # Get courses (current semester by default, or all if specified)
+        courses = canvas_manager.get_all_classes() if load_all else canvas_manager.get_current_classes()
 
         if not courses:
             return jsonify({"error": "No courses found"}), 404
@@ -217,8 +251,9 @@ def get_announcements():
 
 @app.route('/api/canvas/all-data', methods=['GET'])
 def get_all_data():
-    """Get all Canvas data for a user"""
+    """Get Canvas data for a user (current semester by default)"""
     user_id = request.args.get('user_id')
+    load_all = request.args.get('load_all', 'false').lower() == 'true'
 
     if not user_id:
         return jsonify({"error": "User ID is required"}), 400
@@ -227,8 +262,8 @@ def get_all_data():
         # Initialize Canvas manager with user credentials from Firebase
         canvas_manager = CanvasManager(user_id=user_id)
 
-        # Get all courses
-        courses = canvas_manager.get_all_classes()
+        # Get courses (current semester by default, or all if specified)
+        courses = canvas_manager.get_all_classes() if load_all else canvas_manager.get_current_classes()
 
         if not courses:
             return jsonify({"error": "No courses found"}), 404
@@ -250,8 +285,10 @@ def get_all_data():
             }
         }
 
-        # Get announcements for all courses
+        # Get announcements for all courses and track professor information
         all_announcements = []
+        professor_info = {}  # Dictionary to store professor info by course_id
+
         for course in courses:
             course_id = course['course_id']
             course_name = course['course_name']
@@ -264,30 +301,78 @@ def get_all_data():
                         announcement['course_name'] = course_name
                         announcement['course_id'] = course_id
                         all_announcements.append(announcement)
+
+                        # Extract professor info from announcements if available
+                        if 'author' in announcement and announcement['author'] and 'display_name' in announcement['author']:
+                            if course_id not in professor_info:
+                                professor_info[course_id] = []
+
+                            # Check if this professor is already in our list
+                            prof_name = announcement['author']['display_name']
+                            prof_id = announcement['author'].get('id', 0)
+                            prof_exists = False
+
+                            for prof in professor_info[course_id]:
+                                if prof['name'] == prof_name:
+                                    prof_exists = True
+                                    break
+
+                            if not prof_exists:
+                                professor_info[course_id].append({
+                                    'id': prof_id,
+                                    'name': prof_name,
+                                    'role': 'Teacher',
+                                    'email': None,
+                                    'avatar_url': announcement['author'].get('avatar_image_url')
+                                })
             except Exception as e:
                 print(f"Error getting announcements for course {course_id}: {str(e)}")
 
             # Get professors for each course
             try:
                 professors = canvas_manager.get_class_professors(course_id)
-                if professors:
+                if professors and professors[0]['name'] != 'Course Instructor':
                     # Add professors data to response
                     response_data[f"class_professors_{course_id}"] = {
                         "data": professors,
                         "error": None
                     }
+                elif course_id in professor_info and professor_info[course_id]:
+                    # Use professor info extracted from announcements
+                    response_data[f"class_professors_{course_id}"] = {
+                        "data": professor_info[course_id],
+                        "error": None
+                    }
+                else:
+                    # Add placeholder professor data
+                    response_data[f"class_professors_{course_id}"] = {
+                        "data": [{
+                            "id": 0,
+                            "name": "Course Instructor",
+                            "role": "Teacher",
+                            "email": None
+                        }],
+                        "error": None
+                    }
             except Exception as e:
                 print(f"Error getting professors for course {course_id}: {str(e)}")
-                # Add placeholder professor data
-                response_data[f"class_professors_{course_id}"] = {
-                    "data": [{
-                        "id": 0,
-                        "name": "Course Instructor",
-                        "role": "Teacher",
-                        "email": None
-                    }],
-                    "error": None
-                }
+                # Check if we have professor info from announcements
+                if course_id in professor_info and professor_info[course_id]:
+                    response_data[f"class_professors_{course_id}"] = {
+                        "data": professor_info[course_id],
+                        "error": None
+                    }
+                else:
+                    # Add placeholder professor data
+                    response_data[f"class_professors_{course_id}"] = {
+                        "data": [{
+                            "id": 0,
+                            "name": "Course Instructor",
+                            "role": "Teacher",
+                            "email": None
+                        }],
+                        "error": None
+                    }
 
         response_data["announcements"] = {
             "data": all_announcements,
@@ -295,6 +380,96 @@ def get_all_data():
         }
 
         return jsonify(response_data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/canvas/course-professors/<course_id>', methods=['GET'])
+def get_course_professors(course_id):
+    """Get professor information for a specific course"""
+    user_id = request.args.get('user_id')
+
+    if not user_id:
+        return jsonify({"error": "User ID is required"}), 400
+
+    try:
+        # Initialize Canvas manager with user credentials from Firebase
+        canvas_manager = CanvasManager(user_id=user_id)
+
+        # First try to get professors using the standard method
+        professors = canvas_manager.get_class_professors(course_id)
+
+        # If we got placeholder data, try to extract from announcements
+        if not professors or (len(professors) == 1 and professors[0]['name'] == 'Course Instructor'):
+            try:
+                # Get announcements for this course
+                announcements = canvas_manager.get_course_announcements(course_id)
+
+                if announcements:
+                    extracted_professors = []
+                    for announcement in announcements:
+                        if 'author' in announcement and announcement['author'] and 'display_name' in announcement['author']:
+                            prof_name = announcement['author']['display_name']
+                            prof_id = announcement['author'].get('id', 0)
+
+                            # Check if this professor is already in our list
+                            prof_exists = False
+                            for prof in extracted_professors:
+                                if prof['name'] == prof_name:
+                                    prof_exists = True
+                                    break
+
+                            if not prof_exists:
+                                extracted_professors.append({
+                                    'id': prof_id,
+                                    'name': prof_name,
+                                    'role': 'Teacher',
+                                    'email': None,
+                                    'avatar_url': announcement['author'].get('avatar_image_url')
+                                })
+
+                    if extracted_professors:
+                        professors = extracted_professors
+            except Exception as e:
+                print(f"Error extracting professors from announcements: {str(e)}")
+
+        return jsonify({
+            "status": "success",
+            "data": professors,
+            "error": None
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/canvas/load-more-courses', methods=['GET'])
+def load_more_courses():
+    """Load more courses (additional semesters) for a user"""
+    user_id = request.args.get('user_id')
+
+    if not user_id:
+        return jsonify({"error": "User ID is required"}), 400
+
+    try:
+        # Initialize Canvas manager with user credentials from Firebase
+        canvas_manager = CanvasManager(user_id=user_id)
+
+        # Get all courses
+        all_courses = canvas_manager.get_all_classes()
+
+        # Get current semester courses
+        current_courses = canvas_manager.get_current_classes()
+
+        if not all_courses:
+            return jsonify({"error": "No courses found"}), 404
+
+        # Filter out current semester courses to get additional courses
+        current_course_ids = [course['course_id'] for course in current_courses]
+        additional_courses = [course for course in all_courses if course['course_id'] not in current_course_ids]
+
+        return jsonify({
+            "status": "success",
+            "data": additional_courses,
+            "error": None
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
