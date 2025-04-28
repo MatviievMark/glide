@@ -20,7 +20,7 @@ export default function CoursePage({ params }: CoursePageProps) {
   const router = useRouter();
   const courseId = params.courseId;
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [courseData, setCourseData] = useState<any>(null);
+  const [courseData, setCourseData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -104,16 +104,16 @@ export default function CoursePage({ params }: CoursePageProps) {
   const courseInfo = courseData.course_info || {};
   const courseName = courseInfo.name || 'Unknown Course';
   const courseCode = courseInfo.code || '';
-  
+
   // Extract assignments
   const assignments = courseData.assignments || { upcoming: [], past: [], missing: [] };
   const upcomingAssignments = assignments.upcoming || [];
   const pastAssignments = assignments.past || [];
   const missingAssignments = assignments.missing || [];
-  
+
   // Extract professors
   const professors = courseData.professors || [];
-  
+
   // Extract grades
   const grades = courseData.grades || {};
   const currentGrade = grades.current_grade || 'N/A';
@@ -142,9 +142,9 @@ export default function CoursePage({ params }: CoursePageProps) {
         {/* Main Content Area with Scrolling */}
         <div className="flex-1 overflow-y-auto p-6">
           {/* Back Button */}
-          <Button 
-            variant="ghost" 
-            size="sm" 
+          <Button
+            variant="ghost"
+            size="sm"
             className="mb-4 flex items-center"
             onClick={handleBackClick}
           >
@@ -196,7 +196,7 @@ export default function CoursePage({ params }: CoursePageProps) {
                 <CardContent>
                   {professors.length > 0 ? (
                     <ul className="space-y-3">
-                      {professors.map((professor: any, index: number) => (
+                      {professors.map((professor: { name: string; role?: string; email?: string }, index: number) => (
                         <li key={index} className="flex items-start">
                           <div className="bg-purple-100 text-purple-800 rounded-full h-8 w-8 flex items-center justify-center mr-3 flex-shrink-0">
                             {professor.name.charAt(0)}
@@ -233,7 +233,7 @@ export default function CoursePage({ params }: CoursePageProps) {
                 <CardContent>
                   {upcomingAssignments.length > 0 ? (
                     <div className="space-y-2">
-                      {upcomingAssignments.map((assignment: any) => (
+                      {upcomingAssignments.map((assignment: { id: number | string; name: string; due_date?: string }) => (
                         <AssignmentItem
                           key={assignment.id}
                           title={assignment.name}
@@ -261,7 +261,7 @@ export default function CoursePage({ params }: CoursePageProps) {
                 <CardContent>
                   {pastAssignments.length > 0 ? (
                     <div className="space-y-2">
-                      {pastAssignments.map((assignment: any) => (
+                      {pastAssignments.map((assignment: { id: number | string; name: string; due_date?: string; score?: number; points_possible?: number }) => (
                         <AssignmentItem
                           key={assignment.id}
                           title={assignment.name}
@@ -291,7 +291,7 @@ export default function CoursePage({ params }: CoursePageProps) {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      {missingAssignments.map((assignment: any) => (
+                      {missingAssignments.map((assignment: { id: number | string; name: string; due_date?: string; points_possible?: number }) => (
                         <AssignmentItem
                           key={assignment.id}
                           title={assignment.name}

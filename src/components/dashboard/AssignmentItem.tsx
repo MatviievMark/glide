@@ -33,7 +33,7 @@ const AssignmentItem: React.FC<AssignmentItemProps> = ({
       // Try to parse and format the date
       const parsedDate = parseISO(dueDate);
       displayDate = format(parsedDate, 'MMM d, yyyy');
-    } catch (error) {
+    } catch (_) {
       // If parsing fails, just use the raw date
       displayDate = dueDate;
     }
@@ -42,28 +42,22 @@ const AssignmentItem: React.FC<AssignmentItemProps> = ({
   // Determine icon and colors based on status
   let icon;
   let bgColor;
-  let textColor;
 
   if (urgent) {
     icon = <AlertCircle className="w-5 h-5 text-red-600" />;
     bgColor = 'bg-red-100';
-    textColor = 'text-red-600';
   } else if (status === 'upcoming') {
     icon = <Clock className="w-5 h-5 text-blue-600" />;
     bgColor = 'bg-blue-100';
-    textColor = 'text-blue-600';
   } else if (status === 'past') {
     icon = <CheckCircle className="w-5 h-5 text-green-600" />;
     bgColor = 'bg-green-100';
-    textColor = 'text-green-600';
   } else if (status === 'missing') {
     icon = <XCircle className="w-5 h-5 text-red-600" />;
     bgColor = 'bg-red-100';
-    textColor = 'text-red-600';
   } else {
     icon = <FileText className="w-5 h-5 text-blue-600" />;
     bgColor = 'bg-blue-100';
-    textColor = 'text-blue-600';
   }
 
   return (
