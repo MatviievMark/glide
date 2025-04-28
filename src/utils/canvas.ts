@@ -310,8 +310,14 @@ export function isCacheExpired(maxAgeMinutes: number = 30): boolean {
  * Get cached Canvas data from localStorage
  * @returns Cached Canvas data or null if not cached
  */
-function getCachedCanvasData(): CanvasDataResponse | null {
+export function getCachedCanvasData(): CanvasDataResponse | null {
   try {
+    // Check if we're in a browser environment
+    if (typeof window === 'undefined' || !window.localStorage) {
+      console.warn('localStorage is not available');
+      return null;
+    }
+
     const cachedData = localStorage.getItem(CANVAS_CACHE_KEY);
     if (!cachedData) return null;
     return JSON.parse(cachedData);
