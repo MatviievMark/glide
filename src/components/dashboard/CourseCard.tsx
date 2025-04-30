@@ -1,6 +1,7 @@
 import React from 'react';
 import { Settings } from 'lucide-react';
 import { cva, type VariantProps } from 'class-variance-authority';
+import { useRouter } from 'next/navigation';
 
 const courseCardVariants = cva(
   'rounded-xl p-5 transition-colors duration-200 flex flex-col items-center justify-center h-44 cursor-pointer relative overflow-hidden shadow-md',
@@ -29,6 +30,7 @@ type HTMLAttributesWithoutColor = Omit<React.HTMLAttributes<HTMLDivElement>, 'co
 export interface CourseCardProps
   extends HTMLAttributesWithoutColor,
     VariantProps<typeof courseCardVariants> {
+  courseId?: number;
   courseCode?: string;
   courseName?: string;
   instructor?: string;
@@ -41,6 +43,7 @@ const CourseCard = React.forwardRef<HTMLDivElement, CourseCardProps>(
   ({
     className,
     color,
+    courseId,
     courseCode,
     courseName,
     instructor,
@@ -49,6 +52,14 @@ const CourseCard = React.forwardRef<HTMLDivElement, CourseCardProps>(
     onSettingsClick,
     ...props
   }, ref) => {
+    const router = useRouter();
+
+    const handleCardClick = () => {
+      if (courseId && !isAddCard) {
+        router.push(`/courses/${courseId}`);
+      }
+    };
+
     if (isAddCard) {
       return (
         <div
@@ -68,6 +79,7 @@ const CourseCard = React.forwardRef<HTMLDivElement, CourseCardProps>(
       <div
         className={courseCardVariants({ color, className })}
         ref={ref}
+        onClick={handleCardClick}
         {...props}
       >
         {courseCode && (

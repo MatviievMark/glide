@@ -283,6 +283,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 {courses.map((course, index) => (
                   <CourseCard
                     key={course.id}
+                    courseId={course.id}
                     color={colorOptions[index % colorOptions.length]}
                     courseCode={course.code}
                     courseName={course.name}
